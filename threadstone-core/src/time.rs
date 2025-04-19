@@ -1,5 +1,11 @@
 //! Cross‑platform high‑resolution monotonic timer
-//! Returns *nanoseconds since first use* as `u128`.
+//!
+//! Returns nanoseconds since first call as `u128`.
+//! • Apple Silicon / AArch64  → CNTVCT_EL0 / CNTFRQ_EL0
+//! • x86 / x86_64            → RDTSC calibrated once at startup
+//! • Others                  → std::time::Instant fallback
+//!
+//! No unsafe code escapes this module.
 
 use once_cell::sync::Lazy;
 
@@ -22,7 +28,7 @@ mod imp {
     pub fn now_nanos() -> u128 {
         let ticks: u64;
         unsafe { asm!("mrs {ticks}, cntvct_el0", ticks = out(reg) ticks) };
-        // Convert ticks → ns:   ticks * 1_000_000_000 / freq
+        // ticks * 1_000_000_000 / freq  (converted with full 128‑bit precision)
         (ticks as u128 * 1_000_000_000u128) / (*FREQ_HZ as u128)
     }
 }
@@ -36,9 +42,8 @@ mod imp {
     use core::arch::x86_64::__rdtsc;
     use std::time::Instant;
 
-    /// TSC ticks per nanosecond, estimated once at startup with a 50 ms sleep.
+    /// TSC ticks per nanosecond, estimated once at startup with a ~50 ms wall‑clock sample
     static TICKS_PER_NS: Lazy<f64> = Lazy::new(|| {
-        // Measure how many TSC ticks elapse in 50 ms wall‑time.
         let start_tsc = unsafe { __rdtsc() };
         let start = Instant::now();
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -55,7 +60,7 @@ mod imp {
 }
 
 //
-// ─── Fallback implementation ───────────────────────────────────────────────────
+// ─── Fallback (any other architecture) ─────────────────────────────────────────
 //
 #[cfg(not(any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")))]
 mod imp {
@@ -70,4 +75,20 @@ mod imp {
     }
 }
 
+//
+// ─── Public re‑export ──────────────────────────────────────────────────────────
+//
 pub use imp::now_nanos;
+
+#[cfg(test)]
+mod tests {
+    use super::now_nanos;
+
+    #[test]
+    fn monotonic() {
+        let t0 = now_nanos();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let t1 = now_nanos();
+        assert!(t1 > t0, "timer should be increasing ({} <= {})", t0, t1);
+    }
+}
