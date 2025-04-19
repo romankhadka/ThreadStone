@@ -2,6 +2,6 @@
 name = "threadstone-core"
 version = "0.1.0"
 edition = "2021"
-once_cell = "1"          # for one‑time init of frequency if we need it
 
 [dependencies]
+once_cell = "1"
