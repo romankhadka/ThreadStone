@@ -1,0 +1,7 @@
+[workspace]
+members = [
+"threadstone-core",
+"workloads",
+"cli"
+]
+resolver = "2"
