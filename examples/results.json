@@ -1,0 +1,12 @@
+{
+  "workload": "Dhrystone",
+  "threads": 1,
+  "samples": 1,
+  "iterations_per_sample": 50000,
+  "values": [
+    2339.4446086341272
+  ],
+  "average": 2339.4446086341272,
+  "min": 2339.4446086341272,
+  "max": 2339.4446086341272
+}

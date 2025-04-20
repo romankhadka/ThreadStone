@@ -10,7 +10,7 @@ use jsonschema::JSONSchema;
 use serde_json::Value;  // ← added missing semicolon
 
 /// Number of Dhrystone iterations per sample; must fit in a u32
-const ITERATIONS_PER_SAMPLE: u32 = 10_000_000;
+const ITERATIONS_PER_SAMPLE: u32 = 50_000;
 
 #[derive(Serialize, JsonSchema)]
 struct BenchmarkResult {

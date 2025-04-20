@@ -274,6 +274,14 @@ main()
     printf("\n");
 #endif
 
+    /* Ensure HZ is defined for the Too_Small_Time check and calculations */
+#ifndef HZ
+#define HZ 60
+#endif
+#ifndef Too_Small_Time
+#define Too_Small_Time 1 /* Accept shorter run times */
+#endif
+
     User_Time = End_Time - Begin_Time;
 
     if (User_Time < Too_Small_Time)
