@@ -6,3 +6,4 @@ Cargo.lock.old
 # IDEs / macOS
 .idea/
 *.DS_Store
+cli/keys/threadstone.key
