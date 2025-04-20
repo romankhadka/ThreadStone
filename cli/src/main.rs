@@ -18,8 +18,8 @@ mod signing;
 const ITERATIONS_PER_SAMPLE: u32 = 50_000;
 
 /// STREAM vector length (elements) and passes per sample
-const STREAM_LEN: usize = 1 << 20;  // 1 Mi elements
-const STREAM_ITERS: usize = 5;    // 10 passes
+const STREAM_LEN: usize = 1 << 24; // 16 Mi elements
+const STREAM_ITERS: usize = 20;   // 20 passes
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 struct BenchmarkResult {
