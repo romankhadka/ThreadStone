@@ -112,8 +112,19 @@ fn main() {
                 let raw = match fs::read(&key_path) {
                     Ok(data) => data,
                     Err(e) => {
-                        eprintln!("Failed to read private key file: {}", e);
-                        process::exit(1);
+                        eprintln!("Warning: Could not read private key file ({}), proceeding without signing", e);
+                        // Continue without signing instead of failing
+                        if let Some(path) = output {
+                            let path_copy = path.clone(); // Clone to avoid move
+                            fs::write(path, &json).unwrap_or_else(|e| {
+                                eprintln!("Failed to write output file: {}", e);
+                                process::exit(1);
+                            });
+                            println!("✅ Unsigned result written to {}", path_copy.display());
+                        } else {
+                            println!("{}", json);
+                        }
+                        return;
                     }
                 };
                 
@@ -243,10 +254,11 @@ fn main() {
                     fs::create_dir_all(parent).expect("failed to create directory");
                 }
                 let path_display = path.display().to_string(); // Save display string
-                fs::write(path, pretty).expect("failed to write schema file");
+                fs::write(path, &pretty).expect("failed to write schema file");
                 println!("✅ Schema written to {}", path_display);
             } else {
-                println!("{pretty}");
+                // Print the schema JSON directly to stdout
+                println!("{}", pretty);
             }
         }
     }
