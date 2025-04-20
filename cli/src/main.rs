@@ -81,7 +81,7 @@ fn run_workload(workload: Workload, threads: usize, samples: u32) {
         Workload::Dhrystone => {
             println!("Running Dhrystone …");
             let start = now_nanos();
-            let score = run_dhry(10_000); // TODO: scale by `samples`
+            let score = run_dhry(500_000); // ~0.5‑1 s on modern CPUs
             let end = now_nanos();
             println!(
                 "Dhrystone stub score {score}; elapsed {} ns (threads={threads}, samples={samples})",
