@@ -9,6 +9,7 @@ use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use schemars::{schema_for, JsonSchema};
 use jsonschema::JSONSchema;
+use threadstone_core::time::now_nanos;
 
 // Include our signing module
 mod signing;
@@ -18,7 +19,7 @@ const ITERATIONS_PER_SAMPLE: u32 = 50_000;
 
 /// STREAM vector length (elements) and passes per sample
 const STREAM_LEN: usize = 1 << 20;  // 1 Mi elements
-const STREAM_ITERS: usize = 10;    // 10 passes
+const STREAM_ITERS: usize = 5;    // 10 passes
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 struct BenchmarkResult {
@@ -289,7 +290,18 @@ fn run_workload(workload: Workload, threads: usize, samples: u32) -> BenchmarkRe
             let vals: Vec<f64> = pool.install(|| {
                 (0..samples)
                     .into_par_iter()
-                    .map(|_| run_stream(STREAM_LEN, STREAM_ITERS))
+                    .map(|_| {
+                        println!("Running STREAM (size={} × {} passes)…", STREAM_LEN, STREAM_ITERS);
+                        let start = now_nanos();
+                        let bw = run_stream(STREAM_LEN, STREAM_ITERS);
+                        let end = now_nanos();
+                        println!(
+                            "STREAM triad bandwidth: {:.1} MB/s; elapsed {} ns",
+                            bw * 1000.0, // Convert from GB/s to MB/s
+                            end - start
+                        );
+                        bw
+                    })
                     .collect()
             });
             (vals, STREAM_ITERS)
