@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BenchmarkResult",
+  "type": "object",
+  "required": [
+    "average",
+    "iterations_per_sample",
+    "max",
+    "min",
+    "samples",
+    "threads",
+    "values",
+    "workload"
+  ],
+  "properties": {
+    "average": {
+      "type": "number",
+      "format": "double"
+    },
+    "iterations_per_sample": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "max": {
+      "type": "number",
+      "format": "double"
+    },
+    "min": {
+      "type": "number",
+      "format": "double"
+    },
+    "samples": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "sig": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "threads": {
+      "type": "integer",
+      "format": "uint",
+      "minimum": 0.0
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "format": "double"
+      }
+    },
+    "workload": {
+      "type": "string"
+    }
+  }
+}
