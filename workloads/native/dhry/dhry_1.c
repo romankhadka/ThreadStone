@@ -108,6 +108,7 @@ main()
     /* Warning: With 16-Bit processors and Number_Of_Runs > 32000,  */
     /* overflow may occur for this array element.                   */
 
+#ifndef QUIET
     printf("\n");
     printf("Dhrystone Benchmark, Version 2.1 (Language: C)\n");
     printf("\n");
@@ -121,6 +122,8 @@ main()
         printf("Program compiled without 'register' attribute\n");
         printf("\n");
     }
+#endif
+
 #ifdef DHRY_ITERS
     Number_Of_Runs = DHRY_ITERS;
 #else
@@ -133,7 +136,9 @@ main()
     printf("\n");
 #endif
 
+#ifndef QUIET
     printf("Execution starts, %d runs through Dhrystone\n", Number_Of_Runs);
+#endif
 
     /***************/
     /* Start timer */
@@ -211,6 +216,7 @@ main()
     End_Time = clock();
 #endif
 
+#ifndef QUIET
     printf("Execution ends\n");
     printf("\n");
     printf("Final values of the variables used in the benchmark:\n");
@@ -263,14 +269,17 @@ main()
     printf("Str_2_Loc:           %s\n", Str_2_Loc);
     printf("        should be:   DHRYSTONE PROGRAM, 2'ND STRING\n");
     printf("\n");
+#endif
 
     User_Time = End_Time - Begin_Time;
 
     if (User_Time < Too_Small_Time)
     {
+#ifndef QUIET
         printf("Measured time too small to obtain meaningful results\n");
         printf("Please increase number of runs\n");
         printf("\n");
+#endif
     }
     else
     {
@@ -281,6 +290,7 @@ main()
         Microseconds = (float)User_Time * Mic_secs_Per_Second / ((float)HZ * ((float)Number_Of_Runs));
         Dhrystones_Per_Second = ((float)HZ * (float)Number_Of_Runs) / (float)User_Time;
 #endif
+#ifndef QUIET
         printf("Microseconds for one run through Dhrystone: ");
         // printf ("%6.1f \n", Microseconds);
         printf("%d \n", (int)Microseconds);
@@ -288,6 +298,7 @@ main()
         // printf ("%6.1f \n", Dhrystones_Per_Second);
         printf("%d \n", (int)Dhrystones_Per_Second);
         printf("\n");
+#endif
     }
 }
 

@@ -1,6 +1,24 @@
 use clap::{Parser, Subcommand, ValueEnum};
+use num_cpus;
 use threadstone_core::time::now_nanos;
 use workloads::dhrystone::run_dhry;
+use serde::Serialize;
+use rayon::prelude::*;
+
+/// Number of Dhrystone iterations per sample; must fit in a u32
+const ITERATIONS_PER_SAMPLE: u32 = 1_000_000;
+
+#[derive(Serialize)]
+struct BenchmarkResult {
+    workload: String,
+    threads: usize,
+    samples: u32,
+    iterations_per_sample: u32,
+    values: Vec<f64>,      // dhrystones/sec per sample
+    average: f64,
+    min: f64,
+    max: f64,
+}
 
 /// ThreadStone – CPU benchmark suite
 #[derive(Parser)]
@@ -44,7 +62,7 @@ enum Commands {
     },
 }
 
-#[derive(Clone, ValueEnum)]
+#[derive(Debug, Clone, ValueEnum)]
 enum Workload {
     Dhrystone,
     // Placeholder for future workloads:
@@ -77,16 +95,47 @@ fn main() {
 }
 
 fn run_workload(workload: Workload, threads: usize, samples: u32) {
-    match workload {
-        Workload::Dhrystone => {
-            println!("Running Dhrystone …");
-            let start = now_nanos();
-            let score = run_dhry(500_000); // ~0.5‑1 s on modern CPUs
-            let end = now_nanos();
-            println!(
-                "Dhrystone stub score {score}; elapsed {} ns (threads={threads}, samples={samples})",
-                end - start
-            );
-        }
-    }
+    // if user passed 0, use all logical cores
+    let effective_threads = if threads == 0 {
+        num_cpus::get()
+    } else {
+        threads
+    };
+
+    // configure Rayon thread‑pool
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(effective_threads)
+        .build()
+        .unwrap();
+
+    // run samples in parallel
+    let values: Vec<f64> = pool.install(|| {
+        (0..samples).into_par_iter().map(|_| {
+            let t0 = now_nanos();
+            let dps = run_dhry(ITERATIONS_PER_SAMPLE);
+            let t1 = now_nanos();
+            // you could also weight by elapsed if you want
+            dps
+        }).collect()
+    });
+
+    // summary stats
+    let sum: f64 = values.iter().sum();
+    let average = sum / (values.len() as f64);
+    let min = *values.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+    let max = *values.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+
+    let result = BenchmarkResult {
+        workload: format!("{workload:?}"),
+        threads: effective_threads,
+        samples,
+        iterations_per_sample: ITERATIONS_PER_SAMPLE,
+        values,
+        average,
+        min,
+        max,
+    };
+
+    // print JSON
+    println!("{}", serde_json::to_string_pretty(&result).unwrap());
 }

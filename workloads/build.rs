@@ -17,8 +17,9 @@ fn main() {
         .define("TIMES", "1")                 // use <sys/times.h>, no custom decl
         .define("HZ", "60")                   // stops the undeclared‑HZ errors
         .define("NO_IO", "1")                 // printf/scanf no longer needed
-        .define("DHRYSTONE_NO_MAIN", "1")     // bypasses the benchmark’s own timer
-        .define("DHRY_ITERS", "100000000")
+        .define("DHRYSTONE_NO_MAIN", "1")     // bypasses the benchmark's own timer
+        .define("DHRY_ITERS", "1000000")
+        .define("QUIET", "1")                 // suppress all diagnostic output
 
         // ── Automatically pull in <string.h> so strcpy/strcmp are declared ─
         .flag_if_supported("-include")
