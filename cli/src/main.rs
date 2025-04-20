@@ -1,20 +1,21 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use num_cpus;
-use threadstone_core::time::now_nanos;
 use workloads::dhrystone::run_dhry;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use rayon::prelude::*;
 use std::{fs, process, path::PathBuf};
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
-use serde_json::Value;
 use schemars::{schema_for, JsonSchema};
 use jsonschema::JSONSchema;
+
+// Include our signing module
+mod signing;
 
 /// Number of Dhrystone iterations per sample; must fit in a u32
 const ITERATIONS_PER_SAMPLE: u32 = 50_000;
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 struct BenchmarkResult {
     workload: String,
     threads: usize,
@@ -24,6 +25,8 @@ struct BenchmarkResult {
     average: f64,
     min: f64,
     max: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sig: Option<String>,
 }
 
 /// ThreadStone – CPU benchmark suite
@@ -80,57 +83,109 @@ enum Workload {
     // Stream,
 }
 
+fn die(msg: &str) -> ! {
+    eprintln!("❌ {msg}");
+    std::process::exit(1);
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Run { workload, threads, samples, output } => {
-            let json = run_workload(workload, threads, samples);
-            if let Some(path) = output {
-                fs::write(path, &json).unwrap_or_else(|e| {
-                    eprintln!("Failed to write output file: {}", e);
-                    process::exit(1);
-                });
+            let mut result = run_workload(workload, threads, samples);
+
+            // Generate JSON without signature first
+            let json = serde_json::to_string_pretty(&result).unwrap();
+
+            // Optional signing if environment variable is set
+            if let Ok(key_path) = std::env::var("THREADSTONE_PRIVKEY") {
+                let raw = match fs::read(&key_path) {
+                    Ok(data) => data,
+                    Err(e) => {
+                        eprintln!("Failed to read private key file: {}", e);
+                        process::exit(1);
+                    }
+                };
+                
+                // Sign the JSON and update the result
+                let sig = signing::sign(json.as_bytes(), &raw);
+                result.sig = Some(sig);
+                
+                // Re-serialize with signature
+                let signed_json = serde_json::to_string_pretty(&result).unwrap();
+                
+                if let Some(path) = output {
+                    let path_copy = path.clone(); // Clone to avoid move
+                    fs::write(path, &signed_json).unwrap_or_else(|e| {
+                        eprintln!("Failed to write output file: {}", e);
+                        process::exit(1);
+                    });
+                    println!("✅ Signed result written to {}", path_copy.display());
+                } else {
+                    println!("{}", signed_json);
+                }
             } else {
-                println!("{}", json);
+                // Use the original unsigned JSON
+                if let Some(path) = output {
+                    let path_copy = path.clone(); // Clone to avoid move
+                    fs::write(path, &json).unwrap_or_else(|e| {
+                        eprintln!("Failed to write output file: {}", e);
+                        process::exit(1);
+                    });
+                    println!("✅ Unsigned result written to {}", path_copy.display());
+                } else {
+                    println!("{}", json);
+                }
             }
         }
 
         Commands::Verify { file } => {
-            // read & parse
-            let text = fs::read_to_string(&file)
-                .unwrap_or_else(|e| { 
-                    eprintln!("Failed to read {}: {}", file.display(), e); 
-                    process::exit(1) 
-                });
+            // Read the file
+            let text = fs::read_to_string(&file).unwrap_or_else(|e| {
+                eprintln!("Failed to read {}: {}", file.display(), e);
+                process::exit(1)
+            });
             
-            let json: Value = serde_json::from_str(&text)
-                .unwrap_or_else(|e| { 
-                    eprintln!("Invalid JSON in {}: {}", file.display(), e); 
-                    process::exit(1) 
-                });
+            // Parse as BenchmarkResult
+            let mut result: BenchmarkResult = serde_json::from_str(&text).unwrap_or_else(|e| {
+                eprintln!("Invalid JSON in {}: {}", file.display(), e);
+                process::exit(1)
+            });
 
-            // compile schema
+            // Extract signature if present
+            let sig = result.sig.take().unwrap_or_default();
+
+            // Generate schema and validate
             let schema = schema_for!(BenchmarkResult);
             let schema_value = serde_json::to_value(&schema).unwrap();
-            let compiled = JSONSchema::compile(&schema_value)
-                .unwrap_or_else(|e| { 
-                    eprintln!("Schema compilation error: {}", e); 
-                    process::exit(1) 
-                });
+            let compiled = JSONSchema::compile(&schema_value).unwrap_or_else(|e| {
+                eprintln!("Schema compilation error: {}", e);
+                process::exit(1)
+            });
 
-            // validate against the schema
-            let validation = compiled.validate(&json);
-
-            if let Err(errors) = validation {
+            // Validate against schema
+            let json_value = serde_json::to_value(&result).unwrap();
+            if let Err(errors) = compiled.validate(&json_value) {
                 eprintln!("❌ {} failed schema validation:", file.display());
-                for err in errors {
-                    eprintln!("  - {}", err);
+                for error in errors {
+                    eprintln!("  - {}", error);
                 }
                 process::exit(1);
             }
 
-            println!("✅ {} is valid against schema", file.display());
+            // Verify signature if present
+            if !sig.is_empty() {
+                let data = serde_json::to_string_pretty(&result).unwrap();
+                let pubkey = include_bytes!("../keys/threadstone.pub");
+                if !signing::verify(data.as_bytes(), &sig, pubkey) {
+                    eprintln!("❌ Signature verification failed");
+                    process::exit(1);
+                }
+                println!("✅ {} is valid (signature verified)", file.display());
+            } else {
+                println!("✅ {} is valid (no signature to verify)", file.display());
+            }
         }
 
         Commands::Upload { file, endpoint } => {
@@ -173,7 +228,7 @@ fn main() {
 }
 
 /// Runs the given workload and returns the serialized JSON string
-fn run_workload(workload: Workload, threads: usize, samples: u32) -> String {
+fn run_workload(workload: Workload, threads: usize, samples: u32) -> BenchmarkResult {
     // if user passed 0, use all logical cores
     let effective_threads = if threads == 0 {
         num_cpus::get()
@@ -203,7 +258,7 @@ fn run_workload(workload: Workload, threads: usize, samples: u32) -> String {
     let min = *values.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
     let max = *values.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
 
-    let result = BenchmarkResult {
+    BenchmarkResult {
         workload: format!("{:?}", workload),
         threads: effective_threads,
         samples,
@@ -212,7 +267,6 @@ fn run_workload(workload: Workload, threads: usize, samples: u32) -> String {
         average,
         min,
         max,
-    };
-
-    serde_json::to_string_pretty(&result).unwrap()
+        sig: None,
+    }
 }
