@@ -287,20 +287,14 @@ fn run_workload(workload: Workload, threads: usize, samples: u32) -> BenchmarkRe
         }
 
         Workload::Stream => {
+             // STREAM: usize × usize → f64
             let vals: Vec<f64> = pool.install(|| {
                 (0..samples)
                     .into_par_iter()
                     .map(|_| {
-                        println!("Running STREAM (size={} × {} passes)…", STREAM_LEN, STREAM_ITERS);
-                        let start = now_nanos();
-                        let bw = run_stream(STREAM_LEN, STREAM_ITERS);
-                        let end = now_nanos();
-                        println!(
-                            "STREAM triad bandwidth: {:.1} MB/s; elapsed {} ns",
-                            bw * 1000.0, // Convert from GB/s to MB/s
-                            end - start
-                        );
-                        bw
+                        // you can time it with now_nanos() if you like,
+                        // but run_stream already returns GB/s
+                        run_stream(STREAM_LEN, STREAM_ITERS)
                     })
                     .collect()
             });
