@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default number of samples if not specified
-SAMPLES=${1:-5}
+SAMPLES=${1:-10}
 
 # How many cores to use
 CORES=$(sysctl -n hw.ncpu)
