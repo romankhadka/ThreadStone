@@ -21,3 +21,11 @@ threadstone-cli schema
 # or write to file
 threadstone-cli schema -o result.schema.json
 ```
+
+## Quickstart
+
+```bash
+cargo install --path cli
+threadstone run -w dhrystone -t 4 -s 3 -o results.json
+threadstone verify results.json
+```
