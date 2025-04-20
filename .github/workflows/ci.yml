@@ -1,0 +1,14 @@
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with: toolchain: stable
+      - name: Build & Test
+        run: cargo test --workspace
+
+      - name: Export JSON Schema
+        run: |
+          cargo run -p threadstone-cli -- schema -o v1/result.schema.json
+          git diff --exit-code v1/result.schema.json
