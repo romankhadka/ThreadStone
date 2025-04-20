@@ -3,6 +3,7 @@
 //! Measures memory bandwidth in MB/s.
 
 use std::time::Instant;
+use rayon::prelude::*;
 
 /// The scalar multiplier in the STREAM triad
 const SCALAR: f64 = 3.0;
@@ -18,10 +19,14 @@ pub fn run_stream(size: usize, iterations: usize) -> f64 {
     // 2) time the triad loop
     let start = Instant::now();
     for _ in 0..iterations {
-        for i in 0..size {
-            // read b[i], c[i], write a[i]
-            a[i] = b[i] + SCALAR * c[i];
-        }
+        a.par_chunks_mut(1024)
+            .zip(b.par_chunks(1024))
+            .zip(c.par_chunks(1024))
+            .for_each(|((a_chunk, b_chunk), c_chunk)| {
+                for i in 0..a_chunk.len() {
+                    a_chunk[i] = b_chunk[i] + SCALAR * c_chunk[i];
+                }
+            });
     }
     let secs = start.elapsed().as_secs_f64();
 
@@ -40,7 +45,7 @@ mod tests {
     fn tiny_stream_is_sane() {
         // pick a very small size & iterations
         let bw = run_stream(16, 4);
-        // we expect something > 0 and not NaN
+        // we expect something > 0 and not NaN
         assert!(bw.is_finite() && bw > 0.0);
     }
 }
