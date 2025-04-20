@@ -51,6 +51,9 @@ Boolean Reg = true;
 struct tms time_info;
 // extern int times();
 /* see library function "times" */
+#ifndef HZ
+#define HZ 60
+#endif
 #define Too_Small_Time (2 * HZ)
 /* Measurements should last at least about 2 seconds */
 #endif

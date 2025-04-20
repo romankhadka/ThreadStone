@@ -1,14 +1,18 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use num_cpus;
-use threadstone_core::time::now_nanos;
 use workloads::dhrystone::run_dhry;
 use serde::Serialize;
 use rayon::prelude::*;
+use std::{fs, process};
+
+use schemars::{schema_for, JsonSchema};
+use jsonschema::JSONSchema;
+use serde_json::Value;  // ← added missing semicolon
 
 /// Number of Dhrystone iterations per sample; must fit in a u32
-const ITERATIONS_PER_SAMPLE: u32 = 1_000_000;
+const ITERATIONS_PER_SAMPLE: u32 = 10_000_000;
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 struct BenchmarkResult {
     workload: String,
     threads: usize,
@@ -45,7 +49,7 @@ enum Commands {
         samples: u32,
     },
 
-    /// Verify the integrity signature of a result file
+    /// Verify a result file against our JSON schema
     Verify {
         /// Path to result JSON
         file: std::path::PathBuf,
@@ -65,9 +69,6 @@ enum Commands {
 #[derive(Debug, Clone, ValueEnum)]
 enum Workload {
     Dhrystone,
-    // Placeholder for future workloads:
-    // Sgemm,
-    // Stream,
 }
 
 fn main() {
@@ -81,7 +82,30 @@ fn main() {
         } => run_workload(workload, threads, samples),
 
         Commands::Verify { file } => {
-            println!("Signature verification not implemented yet: {}", file.display());
+            // read & parse
+            let text = fs::read_to_string(&file)
+                .unwrap_or_else(|e| { eprintln!("Failed to read {}: {}", file.display(), e); process::exit(1) });
+            let json: Value = serde_json::from_str(&text)
+                .unwrap_or_else(|e| { eprintln!("Invalid JSON in {}: {}", file.display(), e); process::exit(1) });
+
+            // compile schema
+            let rq = schema_for!(BenchmarkResult);
+            let schema_value = serde_json::to_value(&rq).unwrap();
+            let compiled = JSONSchema::compile(&schema_value)
+                .unwrap_or_else(|e| { eprintln!("Schema compilation error: {}", e); process::exit(1) });
+
+            // bind the validation result first so its temporary doesn't outlive `compiled`
+            let validation = compiled.validate(&json);
+
+            if let Err(errors) = validation {
+                eprintln!("❌ {} failed schema validation:", file.display());
+                for err in errors {
+                    eprintln!("  - {}", err);
+                }
+                process::exit(1);
+            }
+
+            println!("✅ {} is valid against schema", file.display());
         }
 
         Commands::Upload { file, endpoint } => {
@@ -110,13 +134,10 @@ fn run_workload(workload: Workload, threads: usize, samples: u32) {
 
     // run samples in parallel
     let values: Vec<f64> = pool.install(|| {
-        (0..samples).into_par_iter().map(|_| {
-            let t0 = now_nanos();
-            let dps = run_dhry(ITERATIONS_PER_SAMPLE);
-            let t1 = now_nanos();
-            // you could also weight by elapsed if you want
-            dps
-        }).collect()
+        (0..samples)
+            .into_par_iter()
+            .map(|_| run_dhry(ITERATIONS_PER_SAMPLE))
+            .collect()
     });
 
     // summary stats
