@@ -1,5 +1,5 @@
 // cli/src/bin/gen_key.rs
-use ring::rand::{SecureRandom, SystemRandom};
+use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair};
 use std::fs;
 

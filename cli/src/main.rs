@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use num_cpus;
 use workloads::dhrystone::run_dhry;
+use workloads::stream::run_stream;
 use serde::{Serialize, Deserialize};
 use rayon::prelude::*;
 use std::{fs, process, path::PathBuf};
@@ -14,6 +15,10 @@ mod signing;
 
 /// Number of Dhrystone iterations per sample; must fit in a u32
 const ITERATIONS_PER_SAMPLE: u32 = 50_000;
+
+/// STREAM vector length (elements) and passes per sample
+const STREAM_LEN: usize = 1 << 20;  // 1 Mi elements
+const STREAM_ITERS: usize = 10;    // 10 passes
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 struct BenchmarkResult {
@@ -89,12 +94,7 @@ enum Workload {
     Dhrystone,
     // Placeholder for future workloads:
     // Sgemm,
-    // Stream,
-}
-
-fn die(msg: &str) -> ! {
-    eprintln!("❌ {msg}");
-    std::process::exit(1);
+    Stream,
 }
 
 fn main() {
@@ -266,40 +266,47 @@ fn main() {
 
 /// Runs the given workload and returns the serialized JSON string
 fn run_workload(workload: Workload, threads: usize, samples: u32) -> BenchmarkResult {
-    // if user passed 0, use all logical cores
-    let effective_threads = if threads == 0 {
-        num_cpus::get()
-    } else {
-        threads
-    };
-
-    // configure Rayon thread‑pool
+    // pick 0=>all cores
+    let effective_threads = if threads == 0 { num_cpus::get() } else { threads };
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(effective_threads)
         .build()
         .unwrap();
 
-    // run samples in parallel
-    let values: Vec<f64> = pool.install(|| {
-        (0..samples)
-            .into_par_iter()
-            .map(|_| {
-                run_dhry(ITERATIONS_PER_SAMPLE)
-            })
-            .collect()
-    });
+    // dispatch to the right kernel
+    let (values, iterations_per_sample) = match workload {
+        Workload::Dhrystone => {
+            let vals = pool.install(|| {
+                (0..samples)
+                    .into_par_iter()
+                    .map(|_| run_dhry(ITERATIONS_PER_SAMPLE))
+                    .collect()
+            });
+            (vals, ITERATIONS_PER_SAMPLE as usize)
+        }
 
-    // summary stats
+        Workload::Stream => {
+            let vals: Vec<f64> = pool.install(|| {
+                (0..samples)
+                    .into_par_iter()
+                    .map(|_| run_stream(STREAM_LEN, STREAM_ITERS))
+                    .collect()
+            });
+            (vals, STREAM_ITERS)
+        }
+    };
+
+    // common summary
     let sum: f64 = values.iter().sum();
     let average = sum / (values.len() as f64);
-    let min = *values.iter().min_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
-    let max = *values.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
+    let min = values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let max = values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
     BenchmarkResult {
         workload: format!("{:?}", workload),
         threads: effective_threads,
         samples,
-        iterations_per_sample: ITERATIONS_PER_SAMPLE,
+        iterations_per_sample: iterations_per_sample as u32,
         values,
         average,
         min,
