@@ -5,6 +5,8 @@ use workloads::dhrystone::run_dhry;
 use serde::Serialize;
 use rayon::prelude::*;
 use std::{fs, process, path::PathBuf};
+use reqwest::blocking::Client;
+use reqwest::StatusCode;
 use serde_json::Value;
 use schemars::{schema_for, JsonSchema};
 use jsonschema::JSONSchema;
@@ -132,7 +134,40 @@ fn main() {
         }
 
         Commands::Upload { file, endpoint } => {
-            // ... existing upload logic ...
+            // 1) read the file
+            let body = fs::read_to_string(&file).unwrap_or_else(|e| {
+                eprintln!("❌ failed to read {}: {}", file.display(), e);
+                process::exit(1)
+            });
+
+            // 2) determine endpoint URL
+            //    override with CLI flag, else use a default
+            let url = endpoint
+                .unwrap_or_else(|| "https://api.threadstone.dev/upload".to_string());
+
+            // 3) POST JSON
+            let client = Client::new();
+            let resp = client
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .body(body)
+                .send()
+                    .unwrap_or_else(|e| {
+                        eprintln!("❌ request error: {}", e);
+                        process::exit(1)
+                    });
+
+            // 4) check status
+            if resp.status() == StatusCode::OK {
+                println!("✅ uploaded successfully to {}", url);
+            } else {
+                eprintln!(
+                    "❌ upload failed: {} - {}",
+                    resp.status(),
+                    resp.text().unwrap_or_default()
+                );
+                process::exit(1);
+            }
         }
     }
 }
