@@ -73,6 +73,15 @@ enum Commands {
         #[arg(short, long)]
         endpoint: Option<String>,
     },
+
+    /// Dump the JSON result schema (that consumers can use to validate results)
+    ///
+    /// If `-o <path>` is provided, writes to that file; otherwise prints to stdout
+    Schema {
+        /// Where to write the schema (defaults to stdout)
+        #[arg(short, long)]
+        output: Option<std::path::PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -222,6 +231,22 @@ fn main() {
                     resp.text().unwrap_or_default()
                 );
                 process::exit(1);
+            }
+        }
+
+        Commands::Schema { output } => {
+            let schema = schema_for!(BenchmarkResult);
+            let pretty = serde_json::to_string_pretty(&schema).unwrap();
+            if let Some(path) = output {
+                // Create parent directories if they don't exist
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent).expect("failed to create directory");
+                }
+                let path_display = path.display().to_string(); // Save display string
+                fs::write(path, pretty).expect("failed to write schema file");
+                println!("✅ Schema written to {}", path_display);
+            } else {
+                println!("{pretty}");
             }
         }
     }
