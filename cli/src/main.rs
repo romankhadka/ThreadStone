@@ -5,11 +5,14 @@ use workloads::dhrystone::run_dhry;
 use serde::Serialize;
 use rayon::prelude::*;
 use std::{fs, process, path::PathBuf};
+use serde_json::Value;
+use schemars::{schema_for, JsonSchema};
+use jsonschema::JSONSchema;
 
 /// Number of Dhrystone iterations per sample; must fit in a u32
-const ITERATIONS_PER_SAMPLE: u32 = 10_000_000;
+const ITERATIONS_PER_SAMPLE: u32 = 50_000;
 
-#[derive(Serialize)]
+#[derive(Serialize, JsonSchema)]
 struct BenchmarkResult {
     workload: String,
     threads: usize,
@@ -92,7 +95,40 @@ fn main() {
         }
 
         Commands::Verify { file } => {
-            // ... existing verify logic ...
+            // read & parse
+            let text = fs::read_to_string(&file)
+                .unwrap_or_else(|e| { 
+                    eprintln!("Failed to read {}: {}", file.display(), e); 
+                    process::exit(1) 
+                });
+            
+            let json: Value = serde_json::from_str(&text)
+                .unwrap_or_else(|e| { 
+                    eprintln!("Invalid JSON in {}: {}", file.display(), e); 
+                    process::exit(1) 
+                });
+
+            // compile schema
+            let schema = schema_for!(BenchmarkResult);
+            let schema_value = serde_json::to_value(&schema).unwrap();
+            let compiled = JSONSchema::compile(&schema_value)
+                .unwrap_or_else(|e| { 
+                    eprintln!("Schema compilation error: {}", e); 
+                    process::exit(1) 
+                });
+
+            // validate against the schema
+            let validation = compiled.validate(&json);
+
+            if let Err(errors) = validation {
+                eprintln!("❌ {} failed schema validation:", file.display());
+                for err in errors {
+                    eprintln!("  - {}", err);
+                }
+                process::exit(1);
+            }
+
+            println!("✅ {} is valid against schema", file.display());
         }
 
         Commands::Upload { file, endpoint } => {
