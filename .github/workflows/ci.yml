@@ -6,39 +6,83 @@ on:
   pull_request:
     branches: [master]
 
+# A newer push makes an in-flight run obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fail on warnings everywhere, not just in the clippy job.
+  RUSTFLAGS: -D warnings
+
 jobs:
-  build-test:
+  lint:
+    name: Format and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  test:
+    name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        rust: [stable]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-targets
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ matrix.rust }}
-          profile: minimal
-          components: rustfmt, clippy
+      # The integration tests use tiny windows; this proves the real thing runs
+      # end to end on each platform, including the environment probes, which
+      # differ per OS and are the most likely thing to break on a runner.
+      - name: Smoke-test a real run
+        run: cargo run --release -- run --samples 2 --warmup 1 --window-ms 40 --threads 2
 
-      - name: fmt check
-        run: cargo fmt --all -- --check
+  msrv:
+    name: Minimum supported Rust (1.75)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.75.0
+      - uses: Swatinem/rust-cache@v2
+      # Cargo.lock is deliberately kept at format version 3: version 4 requires
+      # Cargo 1.78, which would raise the effective MSRV above what the code
+      # actually needs.
+      - run: cargo check --workspace --all-targets
 
-      - name: lint (clippy)
-        run: cargo clippy --all -- -D warnings
-
-      - name: Run all tests
-        run: cargo test --workspace
-
-      - name: CLI integration tests
-        working-directory: cli
-        run: cargo test
-
-      - name: Export JSON Schema & verify
+  schema:
+    name: Result schema is committed and current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Regenerate the schema
+        run: cargo run --quiet -- schema -o v2/result.schema.json
+      - name: Fail if it differs from the committed copy
         run: |
-          cargo run -p threadstone-cli -- schema -o v1/result.schema.json
-          git diff --exit-code v1/result.schema.json
+          if ! git diff --exit-code v2/result.schema.json; then
+            echo "::error::The result schema changed. Run 'cargo run -- schema -o v2/result.schema.json' and commit the result."
+            exit 1
+          fi
+
+  docs:
+    name: Documentation builds without warnings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings

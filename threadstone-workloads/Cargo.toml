@@ -1,0 +1,12 @@
+[package]
+name = "threadstone-workloads"
+description = "The six benchmark kernels of the ThreadStone CPU benchmark suite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+threadstone-core.workspace = true

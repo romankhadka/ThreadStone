@@ -1,0 +1,756 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Report",
+  "description": "A complete benchmark result.",
+  "type": "object",
+  "required": [
+    "config",
+    "duration_secs",
+    "generated_at",
+    "schema_version",
+    "score",
+    "system",
+    "tool_version",
+    "workloads"
+  ],
+  "properties": {
+    "config": {
+      "description": "How the run was configured.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/RunSettings"
+        }
+      ]
+    },
+    "duration_secs": {
+      "description": "Total wall-clock duration of the run, in seconds.",
+      "type": "number",
+      "format": "double"
+    },
+    "generated_at": {
+      "description": "UTC completion time, RFC 3339.",
+      "type": "string"
+    },
+    "schema_version": {
+      "description": "Version of this document's schema. See [`SCHEMA_VERSION`].",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "score": {
+      "description": "Composite scores.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ScoreCard"
+        }
+      ]
+    },
+    "signature": {
+      "description": "Detached signature over the canonical form of this document.\n\nExcluded from the bytes it signs; see [`canonical_json`].",
+      "anyOf": [
+        {
+          "$ref": "#/definitions/Signature"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "system": {
+      "description": "The machine and toolchain this was measured on.",
+      "allOf": [
+        {
+          "$ref": "#/definitions/SystemInfo"
+        }
+      ]
+    },
+    "tool_version": {
+      "description": "Version of the tool that produced it.",
+      "type": "string"
+    },
+    "workloads": {
+      "description": "One entry per workload, in execution order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/WorkloadReport"
+      }
+    }
+  },
+  "definitions": {
+    "BuildProfile": {
+      "description": "How the measuring binary itself was compiled.\n\nTwo runs built with different optimisation settings are not comparable, so the settings travel with the result.",
+      "type": "object",
+      "required": [
+        "debug_assertions",
+        "opt_level"
+      ],
+      "properties": {
+        "debug_assertions": {
+          "description": "Whether debug assertions were enabled. If true, the numbers are junk.",
+          "type": "boolean"
+        },
+        "opt_level": {
+          "description": "`opt-level` the crate was compiled at.",
+          "type": "string"
+        },
+        "target_cpu": {
+          "description": "`--target-cpu` if it was set, otherwise the compiler default.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_features": {
+          "description": "Target features the compiler was allowed to use, e.g. `\"neon\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Pass": {
+      "description": "One measurement pass at a fixed thread count.",
+      "type": "object",
+      "required": [
+        "iters_per_thread",
+        "samples",
+        "stats",
+        "threads",
+        "value",
+        "window_ms"
+      ],
+      "properties": {
+        "iters_per_thread": {
+          "description": "Calibrated work units per thread per round.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "samples": {
+          "description": "Per-round values, in collection order.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "stats": {
+          "description": "Robust statistics over `samples`.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Summary"
+            }
+          ]
+        },
+        "threads": {
+          "description": "Threads used.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "value": {
+          "description": "Headline value: the median of `samples`.",
+          "type": "number",
+          "format": "double"
+        },
+        "window_ms": {
+          "description": "Median round duration, in milliseconds.",
+          "type": "number",
+          "format": "double"
+        },
+        "window_too_short": {
+          "description": "Set when rounds were too short for the clock to resolve well.\n\n`default` is required alongside `skip_serializing_if`: without it the field is omitted when false and then rejected as missing on read, so every report the tool wrote would fail to parse.",
+          "type": "boolean"
+        }
+      }
+    },
+    "RunSettings": {
+      "description": "Parameters the run was executed with.",
+      "type": "object",
+      "required": [
+        "samples",
+        "threads",
+        "warmup",
+        "window_ms"
+      ],
+      "properties": {
+        "samples": {
+          "description": "Measured rounds per workload per pass.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "threads": {
+          "description": "Threads used for the multi-core pass.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "warmup": {
+          "description": "Discarded rounds before measurement.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        },
+        "window_ms": {
+          "description": "Target measurement window, in milliseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ScalingReport": {
+      "description": "How well a workload used additional threads.",
+      "type": "object",
+      "required": [
+        "efficiency",
+        "speedup",
+        "threads"
+      ],
+      "properties": {
+        "efficiency": {
+          "description": "`speedup / threads`. 1.0 is perfect linear scaling.\n\nValues above 1.0 are real and expected on `Partitioned` workloads, where splitting the working set gives each thread a slice that fits in a smaller, faster level of cache.",
+          "type": "number",
+          "format": "double"
+        },
+        "speedup": {
+          "description": "Multi-thread value divided by single-thread value, direction-corrected.",
+          "type": "number",
+          "format": "double"
+        },
+        "threads": {
+          "description": "Threads the multi-thread pass used.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        }
+      }
+    },
+    "ScoreCard": {
+      "description": "Composite scores for one machine.",
+      "type": "object",
+      "required": [
+        "multi_core_components",
+        "reference",
+        "single_core_components"
+      ],
+      "properties": {
+        "multi_core": {
+          "description": "Multi-core score, across every core the machine has.\n\nExcludes workloads marked [`crate::kernel::Scaling::SingleThreadOnly`], so it is not directly comparable to `single_core` on a per-workload basis — only machine to machine.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "multi_core_components": {
+          "description": "Per-workload multi-core ratios that produced `multi_core`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScoreComponent"
+          }
+        },
+        "reference": {
+          "description": "Name of the reference these scores are relative to.",
+          "type": "string"
+        },
+        "single_core": {
+          "description": "Single-core score. `REFERENCE_SCORE` means \"matches the reference core\".",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "single_core_components": {
+          "description": "Per-workload single-core ratios that produced `single_core`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ScoreComponent"
+          }
+        }
+      }
+    },
+    "ScoreComponent": {
+      "description": "One workload's contribution to a composite score.",
+      "type": "object",
+      "required": [
+        "id",
+        "measured",
+        "ratio",
+        "reference"
+      ],
+      "properties": {
+        "id": {
+          "description": "Workload identifier.",
+          "type": "string"
+        },
+        "measured": {
+          "description": "Measured value, in the workload's native unit.",
+          "type": "number",
+          "format": "double"
+        },
+        "ratio": {
+          "description": "Direction-corrected ratio; 1.0 means \"matches the reference\".",
+          "type": "number",
+          "format": "double"
+        },
+        "reference": {
+          "description": "Reference value for that workload.",
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "Signature": {
+      "description": "A detached Ed25519 signature over a report's canonical form.",
+      "type": "object",
+      "required": [
+        "algorithm",
+        "public_key",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "description": "Signature algorithm. Always `\"ed25519\"` in schema version 2.",
+          "type": "string"
+        },
+        "public_key": {
+          "description": "Standard-base64 public key, so a verifier needs nothing but this file.\n\nThis authenticates *integrity*, not *authority*: anyone can sign with their own key. It proves a result has not been edited since signing, and nothing more. Establishing that a given key is trustworthy is out of scope for the file format.",
+          "type": "string"
+        },
+        "value": {
+          "description": "Standard-base64 signature bytes.",
+          "type": "string"
+        }
+      }
+    },
+    "Stability": {
+      "description": "How much run-to-run variation a result exhibited.\n\nThresholds are expressed on the coefficient of variation of the retained samples. They are deliberately strict: a CPU benchmark on an idle machine should comfortably reach `Stable`, and anything worse is a signal that the measurement environment — not the CPU — is what is being observed.",
+      "oneOf": [
+        {
+          "description": "CV below 1%. Differences of a few percent between runs are meaningful.",
+          "type": "string",
+          "enum": [
+            "stable"
+          ]
+        },
+        {
+          "description": "CV below 3%. Usable, but only trust differences larger than the spread.",
+          "type": "string",
+          "enum": [
+            "acceptable"
+          ]
+        },
+        {
+          "description": "CV below 10%. The machine was busy or thermally constrained.",
+          "type": "string",
+          "enum": [
+            "noisy"
+          ]
+        },
+        {
+          "description": "CV at or above 10%. Do not draw conclusions from this run.",
+          "type": "string",
+          "enum": [
+            "unreliable"
+          ]
+        }
+      ]
+    },
+    "Summary": {
+      "description": "Summary of a set of benchmark samples.\n\nAll fields are in the same unit as the input samples. `median` is the headline figure; the rest exist to qualify it.",
+      "type": "object",
+      "required": [
+        "ci95",
+        "cv",
+        "max",
+        "mean",
+        "median",
+        "min",
+        "n",
+        "outliers",
+        "p05",
+        "p95",
+        "stability",
+        "stddev"
+      ],
+      "properties": {
+        "ci95": {
+          "description": "Half-width of the 95% confidence interval on the mean.\n\nUses a normal approximation (1.96·σ/√n), which is adequate at the sample counts this suite collects and errs slightly narrow below n≈10.",
+          "type": "number",
+          "format": "double"
+        },
+        "cv": {
+          "description": "Standard deviation as a fraction of the mean.",
+          "type": "number",
+          "format": "double"
+        },
+        "max": {
+          "description": "Largest retained sample.",
+          "type": "number",
+          "format": "double"
+        },
+        "mean": {
+          "description": "Arithmetic mean of retained samples.",
+          "type": "number",
+          "format": "double"
+        },
+        "median": {
+          "description": "Median of retained samples. This is the value to quote.",
+          "type": "number",
+          "format": "double"
+        },
+        "min": {
+          "description": "Smallest retained sample.",
+          "type": "number",
+          "format": "double"
+        },
+        "n": {
+          "description": "Number of samples retained after outlier rejection.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "outliers": {
+          "description": "Number of samples discarded as outliers.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "p05": {
+          "description": "5th percentile of retained samples (linear interpolation).",
+          "type": "number",
+          "format": "double"
+        },
+        "p95": {
+          "description": "95th percentile of retained samples (linear interpolation).",
+          "type": "number",
+          "format": "double"
+        },
+        "stability": {
+          "description": "Verdict on whether this result is trustworthy.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Stability"
+            }
+          ]
+        },
+        "stddev": {
+          "description": "Sample standard deviation (Bessel-corrected) of retained samples.",
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "SystemInfo": {
+      "description": "Description of the machine and toolchain that produced a result.",
+      "type": "object",
+      "required": [
+        "build_profile",
+        "logical_cores",
+        "os",
+        "target",
+        "timer"
+      ],
+      "properties": {
+        "build_profile": {
+          "description": "Optimisation settings the binary was built with.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/BuildProfile"
+            }
+          ]
+        },
+        "cache_line_bytes": {
+          "description": "Cache line size, in bytes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "cpu_model": {
+          "description": "Marketing name of the CPU, e.g. `\"Apple M4 Pro\"`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cpu_vendor": {
+          "description": "Vendor string where the platform exposes one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "efficiency_cores": {
+          "description": "Efficiency cores on a heterogeneous CPU.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "l1d_bytes": {
+          "description": "L1 data cache per core, in bytes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "l2_bytes": {
+          "description": "L2 cache, in bytes. Per-core or per-cluster depending on the design.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "l3_bytes": {
+          "description": "Last-level cache, in bytes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "logical_cores": {
+          "description": "Logical processors, as the scheduler sees them.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "memory_bytes": {
+          "description": "Installed physical memory, in bytes.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "os": {
+          "description": "Operating system family, e.g. `\"macos\"`.",
+          "type": "string"
+        },
+        "os_version": {
+          "description": "OS release string where obtainable.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "performance_cores": {
+          "description": "Performance cores on a heterogeneous CPU.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "physical_cores": {
+          "description": "Physical cores, excluding SMT siblings.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "rustc_version": {
+          "description": "Compiler version, captured at build time.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "Target triple the binary was compiled for.",
+          "type": "string"
+        },
+        "timer": {
+          "description": "Behaviour of the timing hardware on this machine.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/TimerInfo"
+            }
+          ]
+        }
+      }
+    },
+    "TimerInfo": {
+      "description": "Measured characteristics of the clock used for timing.",
+      "type": "object",
+      "required": [
+        "cycle_hz",
+        "cycle_source",
+        "overhead_ns",
+        "resolution_ns"
+      ],
+      "properties": {
+        "cycle_hz": {
+          "description": "Frequency of that counter, in Hz.",
+          "type": "number",
+          "format": "double"
+        },
+        "cycle_source": {
+          "description": "Hardware source of the raw cycle counter.",
+          "type": "string"
+        },
+        "overhead_ns": {
+          "description": "Cost of reading the measurement clock, in nanoseconds.",
+          "type": "number",
+          "format": "double"
+        },
+        "resolution_ns": {
+          "description": "Smallest interval the measurement clock can resolve, in nanoseconds.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
+    "Unit": {
+      "description": "What a workload's reported number means.\n\nCarrying the direction alongside the unit is what lets the scorer combine latency (lower is better) with throughput (higher is better) without any per-workload special-casing at the call site.",
+      "oneOf": [
+        {
+          "description": "Dhrystones per second.",
+          "type": "string",
+          "enum": [
+            "dhrystones_per_sec"
+          ]
+        },
+        {
+          "description": "Billions of floating-point operations per second.",
+          "type": "string",
+          "enum": [
+            "gflops"
+          ]
+        },
+        {
+          "description": "Gibibytes per second (2^30 bytes), as STREAM has always reported.",
+          "type": "string",
+          "enum": [
+            "gib_per_sec"
+          ]
+        },
+        {
+          "description": "Mebibytes per second (2^20 bytes).",
+          "type": "string",
+          "enum": [
+            "mib_per_sec"
+          ]
+        },
+        {
+          "description": "Millions of elements per second.",
+          "type": "string",
+          "enum": [
+            "melem_per_sec"
+          ]
+        },
+        {
+          "description": "Nanoseconds per operation.",
+          "type": "string",
+          "enum": [
+            "nanoseconds"
+          ]
+        }
+      ]
+    },
+    "WorkloadReport": {
+      "description": "One workload's results across both passes.",
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "reference",
+        "summary",
+        "unit"
+      ],
+      "properties": {
+        "error": {
+          "description": "Why this workload produced no result, if it failed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "excluded_from_multi_core": {
+          "description": "Set when this workload is excluded from the multi-core score, with the reason. See [`Scaling::SingleThreadOnly`].",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Stable workload identifier.",
+          "type": "string"
+        },
+        "multi_thread": {
+          "description": "Multi-thread pass. Absent for single-thread-only workloads.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Pass"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "description": "Display name.",
+          "type": "string"
+        },
+        "reference": {
+          "description": "Reference value used for scoring.",
+          "type": "number",
+          "format": "double"
+        },
+        "scaling": {
+          "description": "Speedup and efficiency, when both passes ran.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ScalingReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "single_thread": {
+          "description": "Single-thread pass.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Pass"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "summary": {
+          "description": "What this workload stresses.",
+          "type": "string"
+        },
+        "unit": {
+          "description": "Unit of every value in this entry.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Unit"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

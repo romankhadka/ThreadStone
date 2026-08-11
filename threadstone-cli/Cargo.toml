@@ -1,0 +1,31 @@
+[package]
+name = "threadstone-cli"
+description = "Command-line interface for the ThreadStone CPU benchmark suite."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+default-run = "threadstone"
+
+[[bin]]
+name = "threadstone"
+path = "src/main.rs"
+
+[dependencies]
+threadstone-core.workspace = true
+threadstone-workloads.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars.workspace = true
+clap = { version = "4.5", features = ["derive"] }
+# Signing only. `ring` is the sole cryptographic dependency; everything else in
+# this workspace is std.
+ring = "0.17"
+base64 = "0.22"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

@@ -1,7 +1,30 @@
 [workspace]
-members = [
-"threadstone-core",
-"workloads",
-"cli"
-]
 resolver = "2"
+members = ["threadstone-core", "threadstone-workloads", "threadstone-cli"]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+rust-version = "1.75"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/romankhadka/threadstone"
+authors = ["Roman Khadka"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = { version = "0.8", features = ["derive"] }
+threadstone-core = { path = "threadstone-core", version = "2.0.0" }
+threadstone-workloads = { path = "threadstone-workloads", version = "2.0.0" }
+
+# Benchmark binaries must be built identically every time, or the numbers are
+# not comparable across runs. `codegen-units = 1` plus fat LTO removes the
+# parallel-codegen nondeterminism that would otherwise perturb hot loops.
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = false
+
+[profile.bench]
+inherits = "release"

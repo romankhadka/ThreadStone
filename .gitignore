@@ -1,9 +1,11 @@
-# Rust
-/target/*
-/**/*.rs.bk
-Cargo.lock.old
+/target
+**/*.rs.bk
 
-# IDEs / macOS
+# Private signing keys must never be committed.
+*.key
+threadstone.key
+
+# Editor / OS noise
 .idea/
+.vscode/
 *.DS_Store
-cli/keys/threadstone.key
