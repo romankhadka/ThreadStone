@@ -14,14 +14,14 @@ ThreadStone 2.0.0 · Apple M4 Pro (10P+4E) · macos · aarch64-apple-darwin
 
 Workload            Unit         1 thread  14 threads  scaling  cv
 ────────────────────────────────────────────────────────────────────
-Dhrystone 2.1       Dhry/s          63.5M        569M     9.0x  ~ 2.8%
-SGEMM 256³          GFLOP/s          18.6         154     8.3x  ~ 2.9%
-SHA-256             MiB/s             405       3.55k     8.8x  ~ 3.8%
-Sort 1Mi u64        Melem/s          99.9         864     8.6x  ~ 2.6%
-STREAM Triad        GiB/s             108         214     2.0x  ~ 1.9%
-Memory Latency      ns                120           —        —  = 0.2%
+Dhrystone 2.1       Dhry/s          68.0M        680M    10.0x  ~ 1.9%
+SGEMM 256³          GFLOP/s          19.1         186     9.7x  ~ 2.8%
+SHA-256             MiB/s             422       3.75k     8.9x  ~ 2.7%
+Sort 1Mi u64        Melem/s           102       1.06k    10.4x  ~ 2.2%
+STREAM Triad        GiB/s             110         214     1.9x  ~ 1.1%
+Memory Latency      ns                118           —        —  = 0.9%
 ────────────────────────────────────────────────────────────────────
-ThreadStone Score  single-core 2358   multi-core 19125
+ThreadStone Score  single-core 2216   multi-core 19373
 ```
 
 ## Install
@@ -44,6 +44,7 @@ threadstone list                         # what each workload measures
 threadstone sweep                        # map the cache hierarchy
 threadstone compare before.json after.json
 threadstone verify result.json
+threadstone sign result.json --key ~/.threadstone/threadstone.key
 ```
 
 Progress goes to stderr, so `threadstone run --format json > result.json` gives
@@ -120,6 +121,7 @@ the entire point of having a normalised score.
 ```bash
 threadstone keygen --dir ~/.threadstone
 threadstone run --sign-key ~/.threadstone/threadstone.key --out result.json
+threadstone sign result.json --key ~/.threadstone/threadstone.key   # or after the fact
 threadstone verify result.json --require-signature
 ```
 

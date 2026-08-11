@@ -51,6 +51,21 @@ enum Command {
         require_signature: bool,
     },
 
+    /// Sign an existing result file with an Ed25519 key.
+    ///
+    /// Signing at run time covers the common case; this covers signing a result
+    /// after the fact, or re-signing one with a different key.
+    Sign {
+        /// Result file to sign.
+        file: PathBuf,
+        /// PKCS#8 Ed25519 private key, as written by `keygen`.
+        #[arg(short, long, value_name = "PATH")]
+        key: PathBuf,
+        /// Write here instead of updating the file in place.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+
     /// Compare two result files and report significant changes.
     Compare {
         /// Baseline result file.
@@ -169,6 +184,7 @@ fn dispatch(command: Command) -> Result<(), Failure> {
             file,
             require_signature,
         } => verify_file(&file, require_signature),
+        Command::Sign { file, key, out } => sign_file(&file, &key, out.as_deref()),
         Command::Compare {
             baseline,
             candidate,
@@ -292,6 +308,24 @@ fn verify_file(path: &Path, require_signature: bool) -> Result<(), Failure> {
     } else {
         Err(format!("{} failed verification", path.display()).into())
     }
+}
+
+fn sign_file(file: &Path, key: &Path, out: Option<&Path>) -> Result<(), Failure> {
+    let mut report: Report =
+        serde_json::from_str(&read_file(file)?).map_err(|e| format!("{}: {e}", file.display()))?;
+
+    // Any existing signature is dropped first: `signing_bytes` excludes the
+    // field, so leaving a stale one in place would be harmless but confusing.
+    report.signature = None;
+    sign_report(&mut report, key)?;
+
+    let destination = out.unwrap_or(file);
+    write_file(
+        destination,
+        serde_json::to_string_pretty(&report)?.as_bytes(),
+    )?;
+    println!("signed {}", destination.display());
+    Ok(())
 }
 
 fn compare_files(baseline: &Path, candidate: &Path) -> Result<(), Failure> {

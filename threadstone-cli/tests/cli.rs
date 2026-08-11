@@ -194,6 +194,121 @@ fn keygen_then_sign_then_verify_round_trips() {
 }
 
 #[test]
+fn an_unsigned_result_can_be_signed_after_the_fact() {
+    let dir = TempDir::new().unwrap();
+    let key = dir.path().join("threadstone.key");
+    let out = dir.path().join("result.json");
+
+    threadstone()
+        .args(["keygen", "--dir", dir.path().to_str().unwrap()])
+        .assert()
+        .success();
+    threadstone()
+        .args(quick_run("sha256"))
+        .args(["--out", out.to_str().unwrap()])
+        .assert()
+        .success();
+
+    // Unsigned to begin with.
+    threadstone()
+        .args(["verify", out.to_str().unwrap(), "--require-signature"])
+        .assert()
+        .failure();
+
+    threadstone()
+        .args([
+            "sign",
+            out.to_str().unwrap(),
+            "--key",
+            key.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    threadstone()
+        .args(["verify", out.to_str().unwrap(), "--require-signature"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("signature   verified"));
+}
+
+#[test]
+fn signing_can_write_to_a_new_file_and_re_sign_with_another_key() {
+    let dir = TempDir::new().unwrap();
+    let second = TempDir::new().unwrap();
+    let source = dir.path().join("result.json");
+    let copy = dir.path().join("signed-copy.json");
+
+    threadstone()
+        .args(["keygen", "--dir", dir.path().to_str().unwrap()])
+        .assert()
+        .success();
+    threadstone()
+        .args(["keygen", "--dir", second.path().to_str().unwrap()])
+        .assert()
+        .success();
+    threadstone()
+        .args(quick_run("sha256"))
+        .args(["--out", source.to_str().unwrap()])
+        .args([
+            "--sign-key",
+            dir.path().join("threadstone.key").to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // Re-signing with a different key must replace the old signature, not
+    // leave a stale one that no longer matches.
+    threadstone()
+        .args([
+            "sign",
+            source.to_str().unwrap(),
+            "--key",
+            second.path().join("threadstone.key").to_str().unwrap(),
+            "--out",
+            copy.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    threadstone()
+        .args(["verify", copy.to_str().unwrap(), "--require-signature"])
+        .assert()
+        .success();
+
+    let original = std::fs::read_to_string(&source).unwrap();
+    let resigned = std::fs::read_to_string(&copy).unwrap();
+    assert_ne!(
+        original, resigned,
+        "a different key must yield a different signature"
+    );
+}
+
+#[test]
+fn signing_with_a_bad_key_fails_clearly() {
+    let dir = TempDir::new().unwrap();
+    let out = dir.path().join("result.json");
+    let junk = dir.path().join("not-a-key");
+    std::fs::write(&junk, b"this is not pkcs8").unwrap();
+
+    threadstone()
+        .args(quick_run("sha256"))
+        .args(["--out", out.to_str().unwrap()])
+        .assert()
+        .success();
+    threadstone()
+        .args([
+            "sign",
+            out.to_str().unwrap(),
+            "--key",
+            junk.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("PKCS#8"));
+}
+
+#[test]
 fn keygen_refuses_to_overwrite_an_existing_private_key() {
     let dir = TempDir::new().unwrap();
     threadstone()

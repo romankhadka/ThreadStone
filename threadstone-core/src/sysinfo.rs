@@ -14,6 +14,7 @@
 //! Linux through `/proc` and `/sys`, and Windows through environment variables
 //! the OS itself populates.
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::process::Command;
 
 use schemars::JsonSchema;
@@ -218,6 +219,11 @@ mod build {
 ///
 /// Used for platform probes that have no dependency-free API. A missing binary,
 /// a non-zero exit, or non-UTF-8 output all yield `None`.
+///
+/// Only the macOS and Linux probes shell out; Windows reads environment
+/// variables the OS already populates. Without this `cfg`, the function is dead
+/// code on Windows and the crate fails to build under `-D warnings`.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn capture(program: &str, args: &[&str]) -> Option<String> {
     let out = Command::new(program).args(args).output().ok()?;
     if !out.status.success() {
@@ -482,6 +488,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     #[test]
     fn capture_returns_none_for_missing_binary() {
         assert!(capture("threadstone-no-such-binary-xyz", &["--version"]).is_none());

@@ -734,6 +734,32 @@ def cache_markers(system: dict) -> list[tuple[int, str]]:
     return markers
 
 
+def signature_rows(report: dict) -> str:
+    """Footer rows describing the signature, if the result carries one."""
+    sig = report.get("signature")
+    if not sig:
+        return ""
+    return (
+        f"<dt>Signature</dt><dd>{e(sig['algorithm'])}</dd>"
+        f"<dt>Public key</dt><dd>{e(sig['public_key'])}</dd>"
+    )
+
+
+def signature_note(report: dict) -> str:
+    """Tell a reader how to check the published numbers for themselves."""
+    if not report.get("signature"):
+        return ""
+    return (
+        "<p style=\"margin-top:16px\">These numbers are signed. Download the "
+        "<a href=\"https://github.com/romankhadka/ThreadStone/blob/master/"
+        "results/apple-m4-pro.json\">result document</a> and run "
+        "<code>threadstone verify apple-m4-pro.json --require-signature</code> "
+        "to confirm nothing has been edited since it was measured. That proves "
+        "integrity, not authority \u2014 it says the file is unmodified, not "
+        "that the machine is what it claims.</p>"
+    )
+
+
 def build(report: dict, sweep: list[dict] | None) -> str:
     """Render the whole page."""
     system = report["system"]
@@ -927,14 +953,14 @@ def build(report: dict, sweep: list[dict] | None) -> str:
       the machine.</p>
     </div>
   </div>
-  <p style="margin-top:28px"><a href="https://github.com/romankhadka/threadstone/blob/master/docs/METHODOLOGY.md">Full
+  <p style="margin-top:28px"><a href="https://github.com/romankhadka/ThreadStone/blob/master/docs/METHODOLOGY.md">Full
   methodology</a>, including the reference values, the statistics, and a
   known-limitations section.</p>
 </section>
 
 <section id="run">
   <h2>Run it yourself</h2>
-  <pre><code>git clone https://github.com/romankhadka/threadstone
+  <pre><code>git clone https://github.com/romankhadka/ThreadStone
 cd threadstone
 cargo install --path threadstone-cli
 
@@ -950,7 +976,7 @@ threadstone compare theirs.json mine.json</code></pre>
 
 <footer>
   <p>ThreadStone {e(report['tool_version'])} ·
-  <a href="https://github.com/romankhadka/threadstone">source</a> ·
+  <a href="https://github.com/romankhadka/ThreadStone">source</a> ·
   MIT or Apache-2.0</p>
   <dl>
     <dt>Measured</dt><dd>{e(report['generated_at'])}</dd>
@@ -967,7 +993,9 @@ threadstone compare theirs.json mine.json</code></pre>
       {report['config']['window_ms']} ms, {report['config']['warmup']} warmup,
       {report['duration_secs']:.0f} s total</dd>
     <dt>Schema</dt><dd>version {report['schema_version']}</dd>
+    {signature_rows(report)}
   </dl>
+  {signature_note(report)}
 </footer>
 </div>
 </body>
