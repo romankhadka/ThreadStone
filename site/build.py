@@ -962,16 +962,16 @@ def build(report: dict, sweep: list[dict] | None) -> str:
   <h2>Run it yourself</h2>
   <pre><code>git clone https://github.com/romankhadka/ThreadStone
 cd threadstone
-cargo install --path threadstone-cli
+cargo install --path threadstone-cli --locked
 
 threadstone run                  # the full suite, both passes
 threadstone sweep                # map your cache hierarchy
 threadstone run --out mine.json  # save the full document
 threadstone compare theirs.json mine.json</code></pre>
   <p>Requires Rust 1.75 or newer. No C toolchain; three third-party crates in
-  the binary. Results can be signed with Ed25519 over canonical JSON — which
-  proves integrity, not authority: that a file has not been edited since
-  signing, and nothing more.</p>
+  the binary. <code>--locked</code> matters: a benchmark built against different
+  dependency versions is not the same benchmark, so <code>Cargo.lock</code> is
+  committed and every install measures with the same code.</p>
 </section>
 
 <footer>

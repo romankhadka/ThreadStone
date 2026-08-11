@@ -27,8 +27,14 @@ ThreadStone Score  single-core 2216   multi-core 19373
 ## Install
 
 ```bash
-cargo install --path threadstone-cli
+cargo install --path threadstone-cli --locked
 ```
+
+`--locked` matters here. Without it Cargo re-resolves dependencies and can pick
+a version that needs a newer compiler than this project's minimum — and, more to
+the point, a benchmark built against different dependency versions is not the
+same benchmark. `Cargo.lock` is committed so every install measures with the
+same code.
 
 Requires Rust 1.75 or newer. There is no C toolchain, no build script beyond
 capturing the compiler version, and three third-party crates in the runtime
