@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThreadStone — a CPU benchmark that shows its work</title>
+<meta name="description" content="Six CPU workloads, each measuring something the others cannot see. Every result records the machine it ran on, how much it varied, and whether it should be believed.">
+<meta name="color-scheme" content="light dark">
+<meta property="og:title" content="ThreadStone">
+<meta property="og:description" content="Six CPU workloads, each measuring something the others cannot see. Every result records the machine it ran on, how much it varied, and whether it should be believed.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232a78d6'/%3E%3Crect x='7' y='18' width='4' height='8' rx='1' fill='white'/%3E%3Crect x='14' y='12' width='4' height='14' rx='1' fill='white'/%3E%3Crect x='21' y='6' width='4' height='20' rx='1' fill='white'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --page:#f9f9f7;--surface:#fcfcfb;--text:#0b0b0b;--text2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--series:#2a78d6;--border:rgba(11,11,11,0.10);
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; --page:#0d0d0d;--surface:#1a1a19;--text:#ffffff;--text2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--series:#3987e5;--border:rgba(255,255,255,0.10); }
+}
+:root[data-theme="dark"] { color-scheme: dark; --page:#0d0d0d;--surface:#1a1a19;--text:#ffffff;--text2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--series:#3987e5;--border:rgba(255,255,255,0.10); }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+a { color: var(--series); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+header { padding: 72px 0 40px; }
+h1 {
+  font-size: clamp(2.2rem, 6vw, 3.2rem);
+  line-height: 1.05; margin: 0 0 12px; letter-spacing: -0.02em;
+}
+.tagline { font-size: 1.2rem; color: var(--text2); margin: 0 0 8px; max-width: 44ch; }
+.machine { color: var(--muted); font-size: 0.95rem; font-family: var(--mono); }
+
+h2 {
+  font-size: 1.5rem; margin: 0 0 6px; letter-spacing: -0.01em;
+  padding-top: 8px;
+}
+h3 { font-size: 1.05rem; margin: 0 0 4px; }
+section { padding: 40px 0; border-top: 1px solid var(--border); }
+.lede { color: var(--text2); margin: 0 0 28px; max-width: 62ch; }
+p { max-width: 68ch; }
+
+/* KPI row -------------------------------------------------------------- */
+.kpis {
+  display: grid; gap: 12px; margin: 32px 0 8px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.kpi {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px;
+}
+.kpi .label {
+  font-size: 0.8rem; color: var(--text2); text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.kpi .value { font-size: 2.1rem; font-weight: 600; line-height: 1.15; margin-top: 4px; }
+.sub { font-size: 0.85rem; color: var(--muted); }
+
+/* Charts --------------------------------------------------------------- */
+figure {
+  margin: 0 0 8px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px 20px 12px; overflow-x: auto;
+}
+figcaption { color: var(--text2); font-size: 0.9rem; margin-top: 10px; max-width: 66ch; }
+svg { display: block; width: 100%; height: auto; max-width: 100%; min-width: 520px; }
+.grid { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.refline { stroke: var(--muted); stroke-width: 1; opacity: 0.65; }
+.reflabel { fill: var(--muted); font-size: 11px; font-family: var(--font); }
+.bar { fill: var(--series); }
+.line { fill: none; stroke: var(--series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.dot { fill: var(--series); stroke: var(--surface); stroke-width: 2; }
+.tick { fill: var(--muted); font-size: 11px; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.cat { fill: var(--text2); font-size: 12.5px; font-family: var(--font); }
+.value { fill: var(--text); font-size: 12.5px; font-weight: 600; font-family: var(--font); }
+.axistitle { fill: var(--muted); font-size: 11.5px; font-family: var(--font); }
+
+/* Tables --------------------------------------------------------------- */
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; min-width: 560px; }
+th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+th:first-child, td:first-child { text-align: left; }
+thead th {
+  color: var(--text2); font-weight: 600; font-size: 0.78rem;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+tbody td { font-variant-numeric: tabular-nums; }
+tbody tr:last-child td { border-bottom: none; }
+.unit { color: var(--muted); font-size: 0.85em; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.78rem; color: var(--text2); white-space: nowrap;
+}
+.pill .dot-status { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--text2); font-size: 0.88rem; }
+
+/* Workload cards ------------------------------------------------------- */
+.cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px 20px;
+}
+.card .num { font-size: 1.5rem; font-weight: 600; margin: 6px 0 2px; }
+.card p { font-size: 0.9rem; color: var(--text2); margin: 8px 0 0; }
+
+.principles { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.principle h3 { font-size: 1rem; }
+.principle p { font-size: 0.92rem; color: var(--text2); margin: 4px 0 0; }
+
+pre {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px 18px; overflow-x: auto; font-family: var(--mono);
+  font-size: 0.87rem; line-height: 1.65;
+}
+code { font-family: var(--mono); font-size: 0.9em; }
+pre code { font-size: 1em; }
+
+footer {
+  border-top: 1px solid var(--border); padding: 32px 0 64px;
+  color: var(--muted); font-size: 0.85rem;
+}
+footer dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 12px 0 0; }
+footer dt { color: var(--text2); }
+footer dd { margin: 0; font-family: var(--mono); font-size: 0.95em; word-break: break-all; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>ThreadStone</h1>
+  <p class="tagline">A CPU benchmark suite that shows its work.</p>
+  <p class="machine">Apple M4 Pro · 10P + 4E · macOS 26.6</p>
+  <div class="kpis"><div class="kpi"><div class="label">Single-core</div><div class="value">2246</div><div class="sub">vs. Reference Core = 1000</div></div><div class="kpi"><div class="label">Multi-core</div><div class="value">18509</div><div class="sub">14 threads</div></div><div class="kpi"><div class="label">Workloads</div><div class="value">6</div><div class="sub">each measuring something distinct</div></div><div class="kpi"><div class="label">Stable results</div><div class="value">2/6</div><div class="sub">run-to-run variation under 3%</div></div></div>
+</header>
+
+<section id="results">
+  <h2>Results</h2>
+  <p class="lede">Six workloads, each measuring something the others cannot see.
+  A CPU that is fast at all six is fast; one that is fast at a single one is fast
+  at that one thing. The per-workload numbers are the actual result — the score
+  is a convenience that throws away the shape.</p>
+  <div class="scroll"><table><thead><tr><th>Workload</th><th>1 thread</th><th>14 threads</th><th>Scaling</th><th>Variation</th></tr></thead><tbody><tr><td>Dhrystone 2.1<br><span class='unit'>Dhry/s</span></td><td>62.3M</td><td>533M</td><td>8.6×</td><td><span class='pill'><span class='dot-status' style='background:#d03b3b'></span>10.5% unreliable</span></td></tr><tr><td>SGEMM 256³<br><span class='unit'>GFLOP/s</span></td><td>18.3</td><td>141</td><td>7.7×</td><td><span class='pill'><span class='dot-status' style='background:#fab219'></span>6.0% noisy</span></td></tr><tr><td>SHA-256<br><span class='unit'>MiB/s</span></td><td>386</td><td>3.44k</td><td>8.9×</td><td><span class='pill'><span class='dot-status' style='background:#fab219'></span>5.8% noisy</span></td></tr><tr><td>Sort 1Mi u64<br><span class='unit'>Melem/s</span></td><td>94.5</td><td>898</td><td>9.5×</td><td><span class='pill'><span class='dot-status' style='background:#fab219'></span>5.5% noisy</span></td></tr><tr><td>STREAM Triad<br><span class='unit'>GiB/s</span></td><td>95.3</td><td>210</td><td>2.2×</td><td><span class='pill'><span class='dot-status' style='background:#0ca30c'></span>0.8% stable</span></td></tr><tr><td>Memory Latency<br><span class='unit'>ns</span></td><td>123</td><td>—</td><td>—</td><td><span class='pill'><span class='dot-status' style='background:#0ca30c'></span>0.4% stable</span></td></tr></tbody></table></div>
+  <p class="lede" style="margin-top:20px">Variation is the coefficient of
+  variation across 11 samples, after discarding
+  3 warmup rounds and rejecting outliers by median
+  absolute deviation. Under 1% is stable; under 3% is usable; above that, the
+  measurement is describing the room rather than the CPU.</p>
+</section>
+
+<section id="scaling">
+  <h2>What the extra cores buy</h2>
+  <p class="lede">Speedup from one thread to 14. Compute-bound workloads
+  approach the core count; STREAM does not, and that is the interesting result —
+  a single core already saturates most of this machine's memory controller, so
+  there is little headroom left for the others.</p>
+  <figure>
+    <svg viewBox="0 0 680 264" width="680" role="img" preserveAspectRatio="xMinYMin meet" aria-label="Speedup from 1 to 14 threads"><title>Speedup from 1 to 14 threads</title><desc>Speedup factor per workload, with perfect linear scaling marked as a reference line.</desc><line x1="132.0" y1="26" x2="132.0" y2="230" class="grid"/><text x="132.0" y="246" class="tick" text-anchor="middle">0</text><line x1="249.5" y1="26" x2="249.5" y2="230" class="grid"/><text x="249.5" y="246" class="tick" text-anchor="middle">5</text><line x1="367.0" y1="26" x2="367.0" y2="230" class="grid"/><text x="367.0" y="246" class="tick" text-anchor="middle">10</text><line x1="484.5" y1="26" x2="484.5" y2="230" class="grid"/><text x="484.5" y="246" class="tick" text-anchor="middle">15</text><line x1="602.0" y1="26" x2="602.0" y2="230" class="grid"/><text x="602.0" y="246" class="tick" text-anchor="middle">20</text><text x="122" y="47.0" class="cat" text-anchor="end">Dhrystone 2.1</text><path class="bar" d="M132 34.0 H329.3 a4 4 0 0 1 4 4 V48.0 a4 4 0 0 1 -4 4 H132 Z"><title>Dhrystone 2.1: 8.6×</title></path><text x="341.3" y="47.0" class="value">8.6×</text><text x="122" y="81.0" class="cat" text-anchor="end">SGEMM 256³</text><path class="bar" d="M132 68.0 H308.9 a4 4 0 0 1 4 4 V82.0 a4 4 0 0 1 -4 4 H132 Z"><title>SGEMM 256³: 7.7×</title></path><text x="320.9" y="81.0" class="value">7.7×</text><text x="122" y="115.0" class="cat" text-anchor="end">SHA-256</text><path class="bar" d="M132 102.0 H337.7 a4 4 0 0 1 4 4 V116.0 a4 4 0 0 1 -4 4 H132 Z"><title>SHA-256: 8.9×</title></path><text x="349.7" y="115.0" class="value">8.9×</text><text x="122" y="149.0" class="cat" text-anchor="end">Sort 1Mi u64</text><path class="bar" d="M132 136.0 H351.3 a4 4 0 0 1 4 4 V150.0 a4 4 0 0 1 -4 4 H132 Z"><title>Sort 1Mi u64: 9.5×</title></path><text x="363.3" y="149.0" class="value">9.5×</text><text x="122" y="183.0" class="cat" text-anchor="end">STREAM Triad</text><path class="bar" d="M132 170.0 H179.8 a4 4 0 0 1 4 4 V184.0 a4 4 0 0 1 -4 4 H132 Z"><title>STREAM Triad: 2.2×</title></path><text x="191.8" y="183.0" class="value">2.2×</text><text x="122" y="217.0" class="cat" text-anchor="end">Memory Latency</text><text x="138" y="217.0" class="tick">single-thread only</text><line x1="461.0" y1="22" x2="461.0" y2="230" class="refline"/><text x="461.0" y="24" class="reflabel" text-anchor="middle">perfect scaling (14×)</text><line x1="132" y1="26" x2="132" y2="230" class="axis"/><text x="367" y="262" class="axistitle" text-anchor="middle">Speedup vs. 1 thread</text></svg>
+    <figcaption>Memory latency is absent because it is measured
+    single-threaded only — see below.</figcaption>
+  </figure>
+</section>
+
+<section id="reference">
+  <h2>Against the reference core</h2>
+  <p class="lede">Each workload's single-thread result as a multiple of the
+  <em>ThreadStone Reference Core v1</em> — a nominal 3.0&nbsp;GHz out-of-order
+  core with 256-bit SIMD and one DDR4-3200 channel. It is a published
+  definition, not a machine anyone owns: a reference derived from the author's
+  own hardware would score exactly 1000 and make every other machine look like a
+  deviation from it.</p>
+  <figure>
+    <svg viewBox="0 0 680 264" width="680" role="img" preserveAspectRatio="xMinYMin meet" aria-label="Single-thread performance relative to the reference core"><title>Single-thread performance relative to the reference core</title><desc>Each workload&#x27;s ratio to its published reference value.</desc><line x1="132.0" y1="26" x2="132.0" y2="230" class="grid"/><text x="132.0" y="246" class="tick" text-anchor="middle">0</text><line x1="249.5" y1="26" x2="249.5" y2="230" class="grid"/><text x="249.5" y="246" class="tick" text-anchor="middle">2.5</text><line x1="367.0" y1="26" x2="367.0" y2="230" class="grid"/><text x="367.0" y="246" class="tick" text-anchor="middle">5</text><line x1="484.5" y1="26" x2="484.5" y2="230" class="grid"/><text x="484.5" y="246" class="tick" text-anchor="middle">7.5</text><line x1="602.0" y1="26" x2="602.0" y2="230" class="grid"/><text x="602.0" y="246" class="tick" text-anchor="middle">10</text><text x="122" y="47.0" class="cat" text-anchor="end">Dhrystone 2.1</text><path class="bar" d="M132 34.0 H323.1 a4 4 0 0 1 4 4 V48.0 a4 4 0 0 1 -4 4 H132 Z"><title>Dhrystone 2.1: 4.2×</title></path><text x="335.1" y="47.0" class="value">4.2×</text><text x="122" y="81.0" class="cat" text-anchor="end">SGEMM 256³</text><path class="bar" d="M132 68.0 H156.7 a4 4 0 0 1 4 4 V82.0 a4 4 0 0 1 -4 4 H132 Z"><title>SGEMM 256³: 0.6×</title></path><text x="168.7" y="81.0" class="value">0.6×</text><text x="122" y="115.0" class="cat" text-anchor="end">SHA-256</text><path class="bar" d="M132 102.0 H200.5 a4 4 0 0 1 4 4 V116.0 a4 4 0 0 1 -4 4 H132 Z"><title>SHA-256: 1.5×</title></path><text x="212.5" y="115.0" class="value">1.5×</text><text x="122" y="149.0" class="cat" text-anchor="end">Sort 1Mi u64</text><path class="bar" d="M132 136.0 H350.0 a4 4 0 0 1 4 4 V150.0 a4 4 0 0 1 -4 4 H132 Z"><title>Sort 1Mi u64: 4.7×</title></path><text x="362.0" y="149.0" class="value">4.7×</text><text x="122" y="183.0" class="cat" text-anchor="end">STREAM Triad</text><path class="bar" d="M132 170.0 H576.0 a4 4 0 0 1 4 4 V184.0 a4 4 0 0 1 -4 4 H132 Z"><title>STREAM Triad: 9.5×</title></path><text x="588.0" y="183.0" class="value">9.5×</text><text x="122" y="217.0" class="cat" text-anchor="end">Memory Latency</text><path class="bar" d="M132 204.0 H162.3 a4 4 0 0 1 4 4 V218.0 a4 4 0 0 1 -4 4 H132 Z"><title>Memory Latency: 0.7×</title></path><text x="174.3" y="217.0" class="value">0.7×</text><line x1="179.0" y1="22" x2="179.0" y2="230" class="refline"/><text x="179.0" y="24" class="reflabel" text-anchor="middle">reference</text><line x1="132" y1="26" x2="132" y2="230" class="axis"/><text x="367" y="262" class="axistitle" text-anchor="middle">Multiple of the reference core</text></svg>
+    <figcaption>The score is the geometric mean of these ratios, ×1000. The
+    geometric mean is used because the arithmetic mean of ratios depends on
+    which machine sits in the denominator — so A could beat B under one
+    reference and lose under another.</figcaption>
+  </figure>
+</section>
+
+<section id="memory">
+  <h2>The memory hierarchy, measured</h2>
+  <p class="lede">One dependent load at a time, over working sets from 4&nbsp;KiB
+  to 256&nbsp;MiB. Nothing can hide the miss, so each plateau is a cache level
+  and each step is a boundary. This is the shape of the machine's memory system.</p>
+  <figure>
+    <svg viewBox="0 0 696 324" width="696" role="img" preserveAspectRatio="xMinYMin meet" aria-label="Memory latency against working-set size"><title>Memory latency against working-set size</title><desc>Latency per dependent load, measured by pointer chasing over working sets from 4 KiB to 256 MiB. Plateaus mark cache levels.</desc><line x1="56" y1="278.0" x2="676" y2="278.0" class="grid"/><text x="48" y="282.0" class="tick" text-anchor="end">0.5</text><line x1="56" y1="247.9" x2="676" y2="247.9" class="grid"/><text x="48" y="251.9" class="tick" text-anchor="end">1</text><line x1="56" y1="217.8" x2="676" y2="217.8" class="grid"/><text x="48" y="221.8" class="tick" text-anchor="end">2</text><line x1="56" y1="178.1" x2="676" y2="178.1" class="grid"/><text x="48" y="182.1" class="tick" text-anchor="end">5</text><line x1="56" y1="148.0" x2="676" y2="148.0" class="grid"/><text x="48" y="152.0" class="tick" text-anchor="end">10</text><line x1="56" y1="117.9" x2="676" y2="117.9" class="grid"/><text x="48" y="121.9" class="tick" text-anchor="end">20</text><line x1="56" y1="78.2" x2="676" y2="78.2" class="grid"/><text x="48" y="82.2" class="tick" text-anchor="end">50</text><line x1="56" y1="48.1" x2="676" y2="48.1" class="grid"/><text x="48" y="52.1" class="tick" text-anchor="end">100</text><line x1="56" y1="18.0" x2="676" y2="18.0" class="grid"/><text x="48" y="22.0" class="tick" text-anchor="end">200</text><text x="56.0" y="296" class="tick" text-anchor="middle">4 KiB</text><text x="133.5" y="296" class="tick" text-anchor="middle">16 KiB</text><text x="211.0" y="296" class="tick" text-anchor="middle">64 KiB</text><text x="288.5" y="296" class="tick" text-anchor="middle">256 KiB</text><text x="366.0" y="296" class="tick" text-anchor="middle">1 MiB</text><text x="443.5" y="296" class="tick" text-anchor="middle">4 MiB</text><text x="521.0" y="296" class="tick" text-anchor="middle">16 MiB</text><text x="598.5" y="296" class="tick" text-anchor="middle">64 MiB</text><text x="676.0" y="296" class="tick" text-anchor="middle">256 MiB</text><line x1="211.0" y1="18" x2="211.0" y2="278" class="refline"/><text x="216.0" y="30" class="reflabel">L1d 64 KiB</text><line x1="521.0" y1="18" x2="521.0" y2="278" class="refline"/><text x="526.0" y="30" class="reflabel">L2 16 MiB</text><path class="line" d="M56.0 250.3 L94.8 250.9 L133.5 248.0 L172.2 250.0 L211.0 251.8 L249.8 252.6 L288.5 169.6 L327.2 169.8 L366.0 172.1 L404.8 170.6 L443.5 162.2 L482.2 156.2 L521.0 135.2 L559.8 63.6 L598.5 46.4 L637.2 43.2 L676.0 39.8"/><circle class="dot" cx="56.0" cy="250.3" r="4"><title>4 KiB: 0.9 ns</title></circle><circle class="dot" cx="94.8" cy="250.9" r="4"><title>8 KiB: 0.9 ns</title></circle><circle class="dot" cx="133.5" cy="248.0" r="4"><title>16 KiB: 1.0 ns</title></circle><circle class="dot" cx="172.2" cy="250.0" r="4"><title>32 KiB: 1.0 ns</title></circle><circle class="dot" cx="211.0" cy="251.8" r="4"><title>64 KiB: 0.9 ns</title></circle><circle class="dot" cx="249.8" cy="252.6" r="4"><title>128 KiB: 0.9 ns</title></circle><circle class="dot" cx="288.5" cy="169.6" r="4"><title>256 KiB: 6.1 ns</title></circle><circle class="dot" cx="327.2" cy="169.8" r="4"><title>512 KiB: 6.1 ns</title></circle><circle class="dot" cx="366.0" cy="172.1" r="4"><title>1 MiB: 5.7 ns</title></circle><circle class="dot" cx="404.8" cy="170.6" r="4"><title>2 MiB: 5.9 ns</title></circle><circle class="dot" cx="443.5" cy="162.2" r="4"><title>4 MiB: 7.2 ns</title></circle><circle class="dot" cx="482.2" cy="156.2" r="4"><title>8 MiB: 8.3 ns</title></circle><circle class="dot" cx="521.0" cy="135.2" r="4"><title>16 MiB: 13.4 ns</title></circle><circle class="dot" cx="559.8" cy="63.6" r="4"><title>32 MiB: 69.9 ns</title></circle><circle class="dot" cx="598.5" cy="46.4" r="4"><title>64 MiB: 103.9 ns</title></circle><circle class="dot" cx="637.2" cy="43.2" r="4"><title>128 MiB: 112.0 ns</title></circle><circle class="dot" cx="676.0" cy="39.8" r="4"><title>256 MiB: 121.1 ns</title></circle><text x="66.0" y="240.3" class="value">0.9 ns</text><text x="668.0" y="27.8" class="value" text-anchor="end">121 ns</text><line x1="56" y1="278" x2="676" y2="278" class="axis"/><text x="366" y="318" class="axistitle" text-anchor="middle">Working set</text><text transform="translate(14 148) rotate(-90)" class="axistitle" text-anchor="middle">Nanoseconds per access (log)</text></svg>
+    <figcaption>Latency per access against working-set size, log scale.
+    Vertical lines mark this machine's reported cache capacities. The rise from
+    0.9&nbsp;ns to 121&nbsp;ns
+    is the whole cost of missing every level of cache.</figcaption>
+  </figure>
+  <details><summary>Table view</summary><div class="scroll"><table><thead><tr><th>Working set</th><th>Latency (ns)</th></tr></thead><tbody><tr><td>4 KiB</td><td>0.9</td></tr><tr><td>8 KiB</td><td>0.9</td></tr><tr><td>16 KiB</td><td>1.0</td></tr><tr><td>32 KiB</td><td>1.0</td></tr><tr><td>64 KiB</td><td>0.9</td></tr><tr><td>128 KiB</td><td>0.9</td></tr><tr><td>256 KiB</td><td>6.1</td></tr><tr><td>512 KiB</td><td>6.1</td></tr><tr><td>1 MiB</td><td>5.7</td></tr><tr><td>2 MiB</td><td>5.9</td></tr><tr><td>4 MiB</td><td>7.2</td></tr><tr><td>8 MiB</td><td>8.3</td></tr><tr><td>16 MiB</td><td>13.4</td></tr><tr><td>32 MiB</td><td>69.9</td></tr><tr><td>64 MiB</td><td>103.9</td></tr><tr><td>128 MiB</td><td>112.0</td></tr><tr><td>256 MiB</td><td>121.1</td></tr></tbody></table></div></details>
+</section>
+<section id="workloads">
+  <h2>The six workloads</h2>
+  <p class="lede">Each covers a dimension of CPU performance the others are
+  blind to.</p>
+  <div class="cards"><div class="card"><h3>Dhrystone 2.1</h3><div class="num">62.3M <span class="unit">Dhry/s</span></div><div class="sub">single thread · 533M Dhry/s at 14 threads</div><p>The 1984 integer benchmark, ported to Rust and verified against the reference implementation&#x27;s published final state. Small integers, dense branching, procedure calls, and 30-byte string copies — a working set that never leaves L1.</p></div><div class="card"><h3>SGEMM 256³</h3><div class="num">18.3 <span class="unit">GFLOP/s</span></div><div class="sub">single thread · 141 GFLOP/s at 14 threads</div><p>Dense f64 matrix multiply, cache-blocked so three 256×256 matrices sit in L2. Loop order is i-k-j, which makes the inner loop a contiguous AXPY that vectorises into FMAs instead of stalling on a dot-product accumulator.</p></div><div class="card"><h3>SHA-256</h3><div class="num">386 <span class="unit">MiB/s</span></div><div class="sub">single thread · 3.44k MiB/s at 14 threads</div><p>The portable software path, no hardware SHA instructions — those are an order of magnitude faster and would measure the presence of one instruction rather than integer throughput. Verified against the NIST vectors.</p></div><div class="card"><h3>Sort 1Mi u64</h3><div class="num">94.5 <span class="unit">Melem/s</span></div><div class="sub">single thread · 898 Melem/s at 14 threads</div><p>The most realistic workload here. Unpredictable branches at every comparison and a recursive access pattern no prefetcher models — what ordinary application code actually does to a CPU.</p></div><div class="card"><h3>STREAM Triad</h3><div class="num">95.3 <span class="unit">GiB/s</span></div><div class="sub">single thread · 210 GiB/s at 14 threads</div><p>McCalpin&#x27;s Triad over three 64 MiB arrays, partitioned across threads so the footprint stays constant at every thread count. Counts 24 bytes per element, following STREAM&#x27;s convention of ignoring read-for-ownership traffic.</p></div><div class="card"><h3>Memory Latency</h3><div class="num">123 <span class="unit">ns</span></div><div class="sub">single thread only</div><p>A dependent-load pointer chase around one random Hamiltonian cycle: each step&#x27;s address is the previous step&#x27;s value, so nothing can hide the miss. Measured single-threaded only — splitting the buffer across threads would fit each slice in cache and report an LLC hit as DRAM latency.</p></div></div>
+</section>
+
+<section id="method">
+  <h2>Why these numbers can be trusted</h2>
+  <p class="lede">Every design decision follows from one idea: a benchmark
+  number is a claim, and a claim nobody can check is worthless.</p>
+  <div class="principles">
+    <div class="principle">
+      <h3>Threads start together</h3>
+      <p>A work-stealing pool hands out samples as slots free up, so early
+      threads run against an idle machine and late ones against a loaded one.
+      ThreadStone releases every thread from a barrier, so the window is exactly
+      “time for all N threads, having started at the same instant.”</p>
+    </div>
+    <div class="principle">
+      <h3>Iteration counts are calibrated</h3>
+      <p>A fixed count that fills 300&nbsp;ms on a laptop fills 3&nbsp;ms on a
+      server — close enough to the clock's granularity to be noise. Counts are
+      discovered at run time, with every thread active, because a count tuned on
+      an idle machine overshoots once memory is contended.</p>
+    </div>
+    <div class="principle">
+      <h3>Nothing unmeasured is in the window</h3>
+      <p>Allocation and page-faulting happen before the clock starts. Threads
+      are spawned once for the whole workload, not once per sample.</p>
+    </div>
+    <div class="principle">
+      <h3>Every number carries its uncertainty</h3>
+      <p>Median rather than mean, because benchmark noise is one-sided — only
+      ever making a sample slower. Outliers are rejected by median absolute
+      deviation and counted, and each result states whether it should be
+      believed.</p>
+    </div>
+    <div class="principle">
+      <h3>Every number carries its provenance</h3>
+      <p>CPU topology, cache sizes, OS, compiler version, target triple,
+      optimisation flags, and the measured resolution of the clock itself.
+      “2,300 Dhrystones/sec” is unfalsifiable; the same number with its machine
+      attached is a claim you can refute.</p>
+    </div>
+    <div class="principle">
+      <h3>What can't be measured well isn't reported</h3>
+      <p>Memory latency is single-thread only. Splitting a 256&nbsp;MiB chase
+      buffer across 14 threads would give each a slice that fits in
+      last-level cache, so the “multi-threaded latency” would be an LLC hit
+      time — several times better than reality, and a straightforward lie about
+      the machine.</p>
+    </div>
+  </div>
+  <p style="margin-top:28px"><a href="https://github.com/romankhadka/threadstone/blob/master/docs/METHODOLOGY.md">Full
+  methodology</a>, including the reference values, the statistics, and a
+  known-limitations section.</p>
+</section>
+
+<section id="run">
+  <h2>Run it yourself</h2>
+  <pre><code>git clone https://github.com/romankhadka/threadstone
+cd threadstone
+cargo install --path threadstone-cli
+
+threadstone run                  # the full suite, both passes
+threadstone sweep                # map your cache hierarchy
+threadstone run --out mine.json  # save the full document
+threadstone compare theirs.json mine.json</code></pre>
+  <p>Requires Rust 1.75 or newer. No C toolchain; three third-party crates in
+  the binary. Results can be signed with Ed25519 over canonical JSON — which
+  proves integrity, not authority: that a file has not been edited since
+  signing, and nothing more.</p>
+</section>
+
+<footer>
+  <p>ThreadStone 2.0.0 ·
+  <a href="https://github.com/romankhadka/threadstone">source</a> ·
+  MIT or Apache-2.0</p>
+  <dl>
+    <dt>Measured</dt><dd>2026-08-11T04:20:57Z</dd>
+    <dt>Machine</dt><dd>Apple M4 Pro</dd>
+    <dt>Target</dt><dd>aarch64-apple-darwin</dd>
+    <dt>Compiler</dt><dd>rustc 1.83.0 (90b35a623 2024-11-26)</dd>
+    <dt>Build</dt><dd>opt-level 3, neon,fp16,dotprod</dd>
+    <dt>Clock</dt><dd>cntvct_el0,
+      41 ns resolution,
+      14.5 ns per read</dd>
+    <dt>Run</dt><dd>11 samples ×
+      400 ms, 3 warmup,
+      85 s total</dd>
+    <dt>Schema</dt><dd>version 2</dd>
+  </dl>
+</footer>
+</div>
+</body>
+</html>

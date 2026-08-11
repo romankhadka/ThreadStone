@@ -124,9 +124,10 @@ impl Kernel for StreamKernel {
             unit: Unit::GibPerSec,
             footprint: Footprint::Partitioned,
             scaling: Scaling::Scales,
-            // One DDR4-3200 channel is 25.6 GB/s peak; real triad reaches
-            // roughly 40% of peak on a single channel.
-            reference: 10.0,
+            // One DDR4-3200 channel is 25.6 GB/s (23.8 GiB/s) peak. A single
+            // core cannot keep enough misses in flight to saturate it and lands
+            // around half, which is what the reference describes.
+            reference: 12.0,
         }
     }
 

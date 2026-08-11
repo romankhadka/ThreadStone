@@ -9,3 +9,7 @@ threadstone.key
 .idea/
 .vscode/
 *.DS_Store
+
+# Python bytecode from the site generator
+__pycache__/
+*.pyc

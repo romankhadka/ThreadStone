@@ -76,6 +76,25 @@ jobs:
             exit 1
           fi
 
+  site:
+    name: Published site is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test the site generator
+        run: python3 -m unittest discover -s site
+      - name: Re-render the site from the committed results
+        run: python3 site/build.py
+      - name: Fail if it differs from the committed copy
+        run: |
+          if ! git diff --exit-code site/index.html; then
+            echo "::error::site/index.html is stale. Run 'python3 site/build.py' and commit the result."
+            exit 1
+          fi
+
   docs:
     name: Documentation builds without warnings
     runs-on: ubuntu-latest

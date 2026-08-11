@@ -267,12 +267,19 @@ DDR4-3200 channel.
 
 | Workload | Reference | Reasoning |
 |---|---|---|
-| `dhrystone` | 15,000,000 Dhry/s | ~200 cycles per loop at 3 GHz |
-| `sgemm` | 30 GFLOP/s | ~60% of a 48 GFLOP/s 256-bit FMA peak |
+| `dhrystone` | 22,000,000 Dhry/s | ~135 cycles per loop at 3 GHz |
+| `sgemm` | 12 GFLOP/s | ~25% of a 48 GFLOP/s 256-bit FMA peak |
 | `sha256` | 250 MiB/s | ~12 cycles per byte, software path |
-| `sort` | 20 Melem/s | ~20 comparisons per element |
-| `stream` | 10 GiB/s | ~40% of one DDR4-3200 channel's 25.6 GB/s |
+| `sort` | 50 Melem/s | ~20 comparisons per element, ~1 cycle each |
+| `stream` | 12 GiB/s | ~half of one DDR4-3200 channel's 23.8 GiB/s |
 | `latency` | 90 ns | Typical DDR4 random-access latency |
+
+Each reference is what the **reference core would achieve running these exact
+kernels**, not what ideal code would achieve on that hardware. The distinction
+matters most for SGEMM: this suite ships a blocked but deliberately
+unvectorised kernel, so a reference derived from hand-tuned BLAS throughput
+would put every machine below 1.0 and would be measuring the kernel rather than
+the CPU.
 
 Fixing the reference by fiat, in round numbers, published here, means the
 author's machine lands wherever it lands. A reference derived from whatever

@@ -152,6 +152,23 @@ pub fn run(
             }
         }
 
+        // A workload with neither pass must say why, or a reader — and
+        // `threadstone verify` — cannot tell a skipped workload from a silently
+        // broken one. The case that reaches here is `--multi-only` against a
+        // single-thread-only workload: nothing failed, but nothing ran either.
+        if single.is_none() && multi.is_none() && errors.is_empty() {
+            errors.push(match info.scaling {
+                Scaling::SingleThreadOnly => format!(
+                    "not run: '{}' is measured single-threaded only, and the \
+                     single-thread pass was disabled",
+                    info.id
+                ),
+                Scaling::Scales => {
+                    "not run: both the single- and multi-thread passes were disabled".to_string()
+                }
+            });
+        }
+
         let error = if errors.is_empty() {
             None
         } else {
@@ -347,6 +364,43 @@ mod tests {
         assert!(report.workloads[0].single_thread.is_some());
         assert!(report.workloads[0].multi_thread.is_none());
         assert!(report.score.multi_core.is_none());
+    }
+
+    #[test]
+    fn a_workload_that_runs_nothing_says_why() {
+        // `--multi-only` against a single-thread-only workload: nothing failed,
+        // but nothing ran. Without an explanation the entry is indistinguishable
+        // from a silent breakage, and `threadstone verify` rejects the file.
+        let kernels: Vec<Box<dyn Kernel>> = vec![Box::new(Busy {
+            id: "st-only",
+            scaling: Scaling::SingleThreadOnly,
+        })];
+        let cfg = SuiteConfig {
+            single_thread: false,
+            ..quick()
+        };
+        let report = run(&kernels, cfg, "test", &Silent);
+        let w = &report.workloads[0];
+
+        assert!(w.single_thread.is_none());
+        assert!(w.multi_thread.is_none());
+        let error = w.error.as_deref().expect("must explain why nothing ran");
+        assert!(error.contains("single-threaded only"), "got: {error}");
+    }
+
+    #[test]
+    fn disabling_both_passes_is_explained_too() {
+        let kernels: Vec<Box<dyn Kernel>> = vec![Box::new(Busy {
+            id: "busy",
+            scaling: Scaling::Scales,
+        })];
+        let cfg = SuiteConfig {
+            single_thread: false,
+            multi_thread: false,
+            ..quick()
+        };
+        let report = run(&kernels, cfg, "test", &Silent);
+        assert!(report.workloads[0].error.is_some());
     }
 
     #[test]

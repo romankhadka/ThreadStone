@@ -467,8 +467,10 @@ impl Kernel for DhrystoneKernel {
             unit: Unit::DhrystonesPerSec,
             footprint: Footprint::PerThread,
             scaling: Scaling::Scales,
-            // The reference core runs the loop in roughly 200 cycles at 3 GHz.
-            reference: 15_000_000.0,
+            // The reference core runs the loop in roughly 135 cycles at
+            // 3 GHz, which is what a wide out-of-order core of that era
+            // achieves on this statement mix at -O3.
+            reference: 22_000_000.0,
         }
     }
 

@@ -85,9 +85,10 @@ impl Kernel for SortKernel {
             unit: Unit::MelemPerSec,
             footprint: Footprint::PerThread,
             scaling: Scaling::Scales,
-            // Roughly 20 comparisons per element at a few nanoseconds each on
-            // the reference core.
-            reference: 20.0,
+            // Roughly 20 comparisons per element, and pdqsort's branchless
+            // partitioning retires them at a little over one cycle each, so a
+            // 3 GHz core sorts about 50 million elements per second.
+            reference: 50.0,
         }
     }
 

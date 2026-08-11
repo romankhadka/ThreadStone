@@ -1,0 +1,48 @@
+name: Deploy site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "site/**"
+      - "results/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; never cancel one mid-flight, since that can leave the
+# published site in a partial state.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The page is rendered from the committed result documents, not from a
+      # fresh run. A GitHub runner is a shared, oversubscribed VM: benchmark
+      # numbers measured there would describe the runner's neighbours, and
+      # publishing them as this project's results would be dishonest.
+      - name: Render the site from committed results
+        run: python3 site/build.py
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

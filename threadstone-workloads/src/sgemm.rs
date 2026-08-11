@@ -125,9 +125,12 @@ impl Kernel for SgemmKernel {
             unit: Unit::Gflops,
             footprint: Footprint::PerThread,
             scaling: Scaling::Scales,
-            // A 3 GHz core with 256-bit FMA peaks near 48 GFLOP/s; a blocked
-            // but not hand-vectorised kernel reaches roughly 60% of that.
-            reference: 30.0,
+            // A 3 GHz core with 256-bit FMA peaks near 48 GFLOP/s. The
+            // reference is what *this* kernel reaches there — around a quarter
+            // of peak — not what a hand-tuned BLAS would. A reference that
+            // assumed hand-vectorised code would score every machine running
+            // this kernel below 1.0 and measure the kernel, not the CPU.
+            reference: 12.0,
         }
     }
 
